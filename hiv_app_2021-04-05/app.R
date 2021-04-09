@@ -28,15 +28,19 @@ ui <- fluidPage(
     tabPanel("QC",
              sidebarLayout(
                sidebarPanel(
-                 sliderInput("topn",
-                             "Number of genes to show in dumbbell plot:",
-                             min = 1,
-                             max = 50,
-                             value = 20)
+                 br(),
+                 helpText("Uncheck the box to select specific sgRNAs 
+                          (plot will only show with 3 or more selections)"),
+                 checkboxInput("selectall", "Plot all sgRNAs", value = TRUE),
+                 conditionalPanel(
+                   condition = "input.selectall == false",
+                   selectizeInput("pickgenes1", "Choose sgRNA(s) to plot:",
+                                 choices = treatment_joined$sgRNA,
+                                 multiple = TRUE,
+                                 selected = c("CASP2_0", "CASP2_1", "CASP2_3"))
+                 )
                ),
                mainPanel(
-                 br(),
-                 plotlyOutput("dumbbell"),
                  br(),
                  plotlyOutput("scatter_r2")
                )
@@ -46,7 +50,7 @@ ui <- fluidPage(
     tabPanel("Output data",
              sidebarLayout(
                sidebarPanel(
-                 radioButtons("showdata", "Select an output file to show:",
+                 radioButtons("showdata", "Select output files to show:",
                               choices = list("median_norm.gene_summary" = "median_norm",
                                              "control_norm.gene_summary" = "control_norm"),
                               selected = "median_norm")
@@ -60,6 +64,8 @@ ui <- fluidPage(
     tabPanel("Ranked gene summary",
              sidebarLayout(
                sidebarPanel(
+                 sliderInput("topn", "Number of genes to plot:",
+                             min = 1, max = 50, value = 20),
                  helpText("Rank by:"),
                  radioButtons("fillby", "Fill bars by:",
                               choices = list("gene in NTC list" = "ntc",
@@ -76,10 +82,10 @@ ui <- fluidPage(
     tabPanel("Individual sgRNAs",
              sidebarLayout(
                sidebarPanel(
-                 selectizeInput("pickgenes", "Choose genes to plot:",
-                              choices = median_norm$id,
-                              multiple = TRUE,
-                              selected = "CASP2")
+                 selectizeInput("pickgenes2", "Choose genes to plot:",
+                                choices = median_norm$id,
+                                multiple = TRUE,
+                                selected = "CASP2")
                ),
                mainPanel(
                  plotlyOutput("scatter_sgrna"),
@@ -108,40 +114,55 @@ server <- function(input, output) {
   
   
   # QC dumbbell plot
-  output$dumbbell <- renderPlotly({
-    
-    pal <- pnw_palette("Bay", 2)
-    
-    treatment_joined %>% 
-      mutate(diff = abs(Dragonite_20201201_2.fastq - Dragonite_20201201_1.fastq)) %>% 
-      arrange(desc(diff)) %>% 
-      slice(1:input$topn) %>%
-      mutate(sgRNA = fct_reorder(as.factor(sgRNA), diff)) %>% 
-      plot_ly(hovertemplate = "%{y}: %{x}<extra></extra>") %>% 
-      add_segments(x = ~Dragonite_20201201_1.fastq, 
-                   xend = ~Dragonite_20201201_2.fastq,
-                   y = ~sgRNA, yend = ~sgRNA,
-                   color = I("grey80"),
-                   showlegend = FALSE) %>% 
-      add_markers(x = ~Dragonite_20201201_1.fastq, y = ~sgRNA, 
-                  color = I(pal[1]),
-                  name = "Dragonite_20201201_1.fastq") %>% 
-      add_markers(x = ~Dragonite_20201201_2.fastq, y = ~sgRNA, 
-                  color = I(pal[2]),
-                  name = "Dragonite_20201201_2.fastq") %>% 
-      layout(title = paste0("Top ", input$topn, " most different sgRNAs between treatment replicates,\nordered by difference"),
-             xaxis = list(title = "count"),
-             yaxis = list(title = ""))
-  })
+  # output$dumbbell <- renderPlotly({
+  #   
+  #   pal <- pnw_palette("Bay", 2)
+  #   
+  #   treatment_joined %>% 
+  #     mutate(diff = abs(Dragonite_20201201_2.fastq - Dragonite_20201201_1.fastq)) %>% 
+  #     arrange(desc(diff)) %>% 
+  #     slice(1:input$topn) %>%
+  #     mutate(sgRNA = fct_reorder(as.factor(sgRNA), diff)) %>% 
+  #     plot_ly(hovertemplate = "%{y}: %{x}<extra></extra>") %>% 
+  #     add_segments(x = ~Dragonite_20201201_1.fastq, 
+  #                  xend = ~Dragonite_20201201_2.fastq,
+  #                  y = ~sgRNA, yend = ~sgRNA,
+  #                  color = I("grey80"),
+  #                  showlegend = FALSE) %>% 
+  #     add_markers(x = ~Dragonite_20201201_1.fastq, y = ~sgRNA, 
+  #                 color = I(pal[1]),
+  #                 name = "Dragonite_20201201_1.fastq") %>% 
+  #     add_markers(x = ~Dragonite_20201201_2.fastq, y = ~sgRNA, 
+  #                 color = I(pal[2]),
+  #                 name = "Dragonite_20201201_2.fastq") %>% 
+  #     layout(title = paste0("Top ", input$topn, " most different sgRNAs between treatment replicates,\nordered by difference"),
+  #            xaxis = list(title = "count"),
+  #            yaxis = list(title = ""))
+  # })
   
   # QC scatter plot with R2 value
   output$scatter_r2 <- renderPlotly({
+    
+    treatment_joined <- if (input$selectall == TRUE) {
+      treatment_joined
+    } else {
+      treatment_joined %>% 
+        filter(sgRNA %in% input$pickgenes1)
+    }
+    
+    control_joined <- if (input$selectall == TRUE) {
+      control_joined
+    } else {
+      control_joined %>% 
+        filter(sgRNA %in% input$pickgenes1)
+    }
     
     treatment_r2 <- round(cor.test(treatment_joined$Dragonite_20201201_1.fastq,
                                    treatment_joined$Dragonite_20201201_2.fastq,
                                    method = "pearson")$estimate ^ 2, 2)
     
-    p1 <- treatment_joined %>% 
+    
+    p1 <- treatment_joined %>%
       ggplot(aes(x = Dragonite_20201201_1.fastq, 
                  y = Dragonite_20201201_2.fastq,
                  dummy = sgRNA, group = 1)) +
@@ -216,7 +237,7 @@ server <- function(input, output) {
                        rank_type == "pos|rank" ~ score_type == "pos|score")) %>%
       filter(case_when(rank_type == "neg|rank" ~ p_type == "neg|p-value",
                        rank_type == "pos|rank" ~ p_type == "pos|p-value")) 
-      
+    
     
     p3 <- df_top20 %>% 
       ggplot(aes(y = fct_reorder(id, -rank), x = -log10(score),
@@ -239,7 +260,7 @@ server <- function(input, output) {
   output$scatter_sgrna <- renderPlotly({
     
     p4 <- median_norm_sgRNA %>% 
-      filter(Gene %in% input$pickgenes) %>% 
+      filter(Gene %in% input$pickgenes2) %>% 
       ggplot(aes(x = Gene, y = score, color = Gene)) + 
       geom_jitter(aes(group = Gene, sgRNA = sgrna),
                   width = 0.1, alpha = 0.6) +
