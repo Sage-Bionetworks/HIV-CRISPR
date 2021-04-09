@@ -1,0 +1,558 @@
+---
+title: "HIV-CRISPR"
+author: "Pierrette Lo"
+date: "3/19/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(yaml)
+library(synapser)
+library(synapserutils)
+library(DT)
+library(ggpubr)
+library(ggalt)
+library(plotly)
+library(ggiraph)
+library(crosstalk)
+library(PNWColors)
+```
+
+## Strategy:
+
+1. figure out data and make individual plots
+2. generalize/automate plots
+3. put into shiny framework
+
+## Data Pull
+
+Connect to Synapse using `rememberMe` method (`.synapseConfig` method didn't work)
+
+Ref: https://r-docs.synapse.org/articles/manageSynapseCredentials.html
+
+```{r}
+synLogin()
+```
+Test sample sheet `20201230_Dragonite_Comp2`, with 8 comparisons
+
+Get folder, extract comparison filenames and ids:
+
+ref: https://jennybc.github.io/purrr-tutorial/ls01_map-name-position-shortcuts.html
+
+```{r}
+comps_list <- as.list(synGetChildren("syn25435306")) %>% 
+  map_df(`[`, c("name", "id"))
+```
+
+Function to read in a comparison file (YAML sample sheet)
+
+```{r}
+get_comp_ids <- function(comp_id){
+  synGet(comp_id) %>% 
+    `[[`("path") %>% 
+    read_yaml() %>% 
+    `[[`("comparisons"[[1]]) %>% 
+    unlist() %>% 
+    enframe()
+}
+```
+
+Get all comparison files
+
+Rename id to configId to match output file view
+
+```{r}
+all_comps <- comps_list %>% 
+ mutate(comp_info = map(id, get_comp_ids)) %>% 
+  unnest() %>% 
+  pivot_wider(names_from = name1, values_from = value) %>% 
+  unnest() %>% 
+  rename(configId = id)
+```
+
+Pull in output file view and join to `all_comps`
+
+```{r}
+config_count_output_link <- synTableQuery(sprintf("SELECT * FROM syn25435509", "syn25435509")) %>% 
+  `[[`("filepath") %>% 
+read_csv() %>% 
+  select(-starts_with("ROW"))
+
+all_comps <- all_comps %>% 
+  left_join(config_count_output_link, by = c("name", "configId")) %>% 
+  rename(output_folder = id)
+```
+
+Get metadata for all files
+```{r}
+metadata <- synTableQuery(sprintf("SELECT * FROM syn21763191", "syn21763191")) %>% 
+  `[[`("filepath") %>% 
+read_csv() %>% 
+  select(-starts_with("ROW"))
+```
+
+Get library files from `guide library` folder
+
+```{r}
+libraries_raw <- syncFromSynapse("syn21915617")
+
+
+
+
+
+```
+
+
+**get synapse IDs for output folder contents**
+
+
+
+
+Get Synapse entities
+```{r}
+
+
+
+
+
+#treatment counts
+syn23702679 <- synGet("syn23702679")
+syn23702680 <- synGet("syn23702680")
+
+#control counts
+syn23702681 <- synGet("syn23702681")
+syn23702682 <- synGet("syn23702682")
+
+#median_norm gene_summary output
+syn23748102 <- synGet("syn23748102")
+
+#control_norm gene_summary output
+syn23748097 <- synGet("syn23748097")
+
+
+
+#CUL3 NTC list
+syn23594725 <- synGet("syn23594725")
+
+#median_norm sgRNA summary
+syn23748103 <- synGet("syn23748103")
+
+#control_norm sgRNA summary
+syn23748098 <- synGet("syn23748098")
+```
+
+Read in the data part:
+```{r}
+treatment1 <- read_tsv(syn23702679$path)
+treatment2 <- read_tsv(syn23702680$path)
+
+treatment_joined <- treatment1 %>% 
+  left_join(treatment2, by = "sgRNA")
+
+control1 <- read_tsv(syn23702681$path)
+control2 <- read_tsv(syn23702682$path)
+
+control_joined <- control1 %>% 
+  left_join(control2, by = "sgRNA")
+
+median_norm <- read_tsv(syn23748102$path)
+control_norm <- read_tsv(syn23748097$path)
+
+
+
+CUL3_NTC_raw <- read_lines(syn23594725$path)
+CUL3_synNTC_list <- str_replace(CUL3_NTC_raw, "^.+syn", "syn")
+
+median_norm_sgRNA <- read_tsv(syn23748103$path)
+control_norm_sgRNA <- read_tsv(syn23748098$path)
+```
+
+
+## Quality Control
+
+Compare correlation of replicates used in MAGeCK analysis
+
+>a. graph counts from replicates used in analysis as a histogram (overlaid?)
+
+This is not great b/c there are 5000+ genes. Is there some subset that would be most useful? Maybe the top X greatest fold difference?
+
+```{r}
+treatment_joined %>%
+  pivot_longer(cols = -sgRNA,
+               names_to = "replicate", 
+               values_to = "count") %>% 
+  ggplot(aes(x = sgRNA, y = count, fill = replicate)) +
+  geom_col(position = "dodge")
+  
+```
+
+eg. top 20 most different counts
+
+format tooltip labels in plotly: https://stackoverflow.com/a/50223703
+
+```{r}
+p <- treatment_joined %>% 
+  mutate(diff = abs(Dragonite_20201201_2.fastq - Dragonite_20201201_1.fastq)) %>% 
+  arrange(desc(diff)) %>% 
+  slice(1:20) %>% 
+  pivot_longer(cols = -c(sgRNA, diff), 
+               names_to = "replicate",
+               values_to = "count") %>% 
+  ggplot(aes(y = fct_reorder(as.factor(sgRNA), diff), 
+             x = count, fill = replicate)) +
+  geom_col(position = "dodge", show.legend = FALSE) +
+  ylab(NULL) +
+  ggtitle("Top 20 most different sgRNAs between treatment replicates,\nordered by difference")
+
+ggplotly(p)
+```
+
+Or dumbbell format (static):
+
+```{r}
+treatment_joined %>% 
+  mutate(diff = abs(Dragonite_20201201_2.fastq - Dragonite_20201201_1.fastq)) %>% 
+  arrange(desc(diff)) %>% 
+  slice(1:20) %>% 
+  ggplot() +
+  geom_dumbbell(aes(y = fct_reorder(as.factor(sgRNA), diff), 
+             x = Dragonite_20201201_1.fastq, 
+             xend = Dragonite_20201201_2.fastq),
+             size = 3, colour_x = "darkorange", colour_xend = "steelblue",
+             colour = "grey") +
+  ylab(NULL) +
+  xlab("count") +
+  ggtitle("Top 20 most different sgRNAs between treatment replicates,\nordered by difference")
+```
+
+Dumbbell interactive:
+
+```{r}
+pal <- pnw_palette("Bay", 2)
+
+treatment_joined %>% 
+  mutate(diff = abs(Dragonite_20201201_2.fastq - Dragonite_20201201_1.fastq)) %>% 
+  arrange(desc(diff)) %>% 
+  slice(1:20) %>%
+  mutate(sgRNA = fct_reorder(as.factor(sgRNA), diff)) %>% 
+  plot_ly(hoverinfo = "text") %>% 
+  add_segments(x = ~Dragonite_20201201_1.fastq, 
+               xend = ~Dragonite_20201201_2.fastq,
+               y = ~sgRNA, yend = ~sgRNA,
+               color = I("grey80"),
+               showlegend = FALSE) %>% 
+  add_markers(x = ~Dragonite_20201201_1.fastq, y = ~sgRNA, 
+              name = "treatment1",
+              color = I(pal[1]),
+              text = ~Dragonite_20201201_1.fastq) %>% 
+  add_markers(x = ~Dragonite_20201201_2.fastq, y = ~sgRNA, 
+              name = "treatment2",
+              color = I(pal[2]),
+              text = ~Dragonite_20201201_2.fastq) %>% 
+  layout(title = "Top 20 most different sgRNAs between treatment replicates,\nordered by difference",
+         xaxis = list(title = "count"),
+         yaxis = list(title = ""))
+```
+
+
+>b. Ability to graph counts from 2 replicates in data used for comparisons with r2 value shown.
+
+with {ggpubr} for static plot: https://stackoverflow.com/a/60143489
+
+```{r}
+treatment_joined %>% 
+  ggplot(aes(x = Dragonite_20201201_1.fastq, 
+             y = Dragonite_20201201_2.fastq)) +
+  geom_point() +
+  geom_smooth(method = "lm", 
+              formula = "y ~ x",
+              se = FALSE) +
+  stat_cor(aes(label = ..rr.label..), label.x = 0) +
+  labs(title = "QC of treatment replicates")
+```
+
+- without {ggpubr} for plotly: https://stackoverflow.com/a/61092628
+- need `group=1` or `geom_smooth` goes away with plotly: https://stackoverflow.com/a/45949453
+- ggplotly side by side ({patchwork} doesn't work): https://stackoverflow.com/a/61574925
+
+```{r}
+treatment_r2 <- round(cor.test(treatment_joined$Dragonite_20201201_1.fastq,
+                         treatment_joined$Dragonite_20201201_2.fastq,
+                         method = "pearson")$estimate ^ 2, 2)
+
+p1 <- treatment_joined %>% 
+  ggplot(aes(x = Dragonite_20201201_1.fastq, 
+             y = Dragonite_20201201_2.fastq,
+             dummy = sgRNA, group = 1)) +
+  geom_point() +
+  geom_smooth(method = "lm", 
+              formula = "y ~ x",
+              se = FALSE) +
+  annotate("text", label = paste0("R^2 = ", treatment_r2), 
+           x = min(treatment_joined$Dragonite_20201201_1.fastq), y
+           = max(treatment_joined$Dragonite_20201201_2.fastq)) +
+  labs(title = "QC of treatment (left) and control (right) replicates")
+
+fig1 <- ggplotly(p1) %>% 
+  style(textposition = "right")
+
+control_r2 <- round(cor.test(control_joined$Dragonite_20201201_17.fastq,
+                         control_joined$Dragonite_20201201_18.fastq,
+                         method = "pearson")$estimate ^ 2, 2)
+
+p2 <- control_joined %>% 
+  ggplot(aes(x = Dragonite_20201201_17.fastq, 
+             y = Dragonite_20201201_18.fastq,
+             dummy = sgRNA, group = 1)) +
+  geom_point() +
+  geom_smooth(method = "lm", 
+              formula = "y ~ x",
+              se = FALSE) +
+  annotate("text", label = paste0("R^2 = ", control_r2), 
+           x = min(control_joined$Dragonite_20201201_17.fastq), 
+           y = max(control_joined$Dragonite_20201201_18.fastq))
+fig2 <- ggplotly(p2) %>% 
+  style(textposition = "right")
+
+subplot(fig1, fig2,
+        titleX = TRUE,
+        titleY = TRUE)
+```
+
+
+>c. Ability to Export figures into pdf/tiff/png
+
+Can do this in plotly
+
+## Basic Viewing for a single Comparison
+
+Search for a gene and see Gene Score/Rank across all comparisons
+Enter Gene Name in Search Bar, Select from a Filter
+Format: Table Format, Bar Graph, other?
+Bar Graph: Showing highest scoring first
+Option to select Top Hits by # or score cutoff
+
+Note: this example shows “Positive Gene Scores”. We’d like to be able to show “Negative Gene Scores” as well (see below for an idea of a more “comprehensive” way to view this data).
+
+Ref for pos/neg ranking: https://sourceforge.net/p/mageck/wiki/demo/#the-third-demo-going-through-a-public-crisprcas9-screening-dataset
+
+Table format - use DataTables {DT} -> rank by `neg|rank` or `pos|rank`
+
+- Add buttons to allow export to CSV/PDF
+- I think you can link selection in DT to plotly in Shiny
+- need to pull in metadata for other features
+```{r}
+datatable(median_norm)
+```
+
+Top 20 gene scores - oloured by NTC
+
+subtitles in ggplotly: https://datascott.com/blog/subtitles-with-ggplotly/
+
+```{r}
+p3 <- median_norm %>% 
+  arrange(`neg|rank`) %>% 
+  filter(`neg|rank` <= 20) %>% 
+  ggplot(aes(y = fct_reorder(id, -`neg|rank`), x = -log10(`neg|score`),
+             fill = id %in% CUL3_synNTC_list,
+             rank = `neg|rank`, score = `neg|score`)) +
+  geom_col() +
+  scale_fill_brewer(palette = "Dark2") +
+  ylab(NULL) +
+  xlab("-log10 MAGeCK gene score (negative)")
+
+fig3 <- ggplotly(p3, tooltip = c("rank", "score")) %>% 
+  layout(title = list(text = paste0("Top 20 highest ranked genes, negative (left) and positive (right)",
+                                    "<br>",
+                                    "<sup>",
+                                    "Left, fill by NTC; right, fill by p >= 0.01",
+                                    "</sup>")))
+
+p4 <- median_norm %>% 
+  arrange(`pos|rank`) %>% 
+  filter(`pos|rank` <= 20) %>% 
+  ggplot(aes(y = fct_reorder(id, -`pos|rank`), x = -log10(`pos|score`),
+             fill = `pos|p-value`<=0.01,
+             rank = `pos|rank`, score = `pos|score`, p = `pos|p-value`)) +
+  geom_col() +
+    scale_fill_brewer(palette = "Dark2") +
+  ylab(NULL) +
+  xlab("-log10 MAGeCK gene score (positive)")
+
+fig4 <- ggplotly(p4, tooltip = c("rank", "score", "p"))
+
+subplot(fig3, fig4,
+        shareX = TRUE)
+```
+
+Other Features:
+> Hover over each point and access additional info: Experimenter, Virus, Cell Line, Latency/Not Latency, etc
+
+- In this case the metadata is the same for every point, so it could be shown elsewhere in the app (instead of on hover)
+
+Pull from treatment 1 (syn23702679)
+
+pivot_wider with conversion to character: https://stackoverflow.com/a/63572366
+
+```{r}
+metadata %>% 
+  filter(id == "syn23702679") %>%
+  select(-starts_with("ROW_")) %>% 
+  pivot_longer(cols = everything(),
+               names_to = "field", values_to = "value",
+               values_transform = list(value = as.character)) %>% 
+  knitr::kable()
+```
+
+
+> links to other databases (PubMed, GeneCard, etc.). 
+
+> Also, click to see Gene Scores/Ranks across all comparisons.
+
+> Highlight a set of genes of interest and export the info (perhaps in an excel/tsv/csv output that includes all metadata attached to the gene)
+
+Link plotly selection to DataTable?
+
+> Add filters to discriminate between different groups of points (discriminate groups by color): Non-Targeting Controls (NTCs), Reported genes in a pathway, a provided list of genes of interest, Significant genes (genes that are above a cutoff), IFN Induction (see #5 below)
+
+**Aren't all the NTCs designated with "NTC"? At least in CUL3**
+
+
+>Mouse over a Gene to show individual sgRNA scores (from sgRNA summary files) as compared to full distribution of sgRNAs from the screen
+Example: below or other types of showings sgRNA score on a distribution of all scores
+
+Again, need to figure out how to programmatically get sgRNA_summary and gene_summary from comparison file
+
+**figure out tooltips for median lines**
+
+```{r}
+p <- median_norm_sgRNA %>% 
+  filter(str_detect(Gene, "KBTBD")) %>% 
+  ggplot(aes(x = Gene, y = score, color = Gene)) + 
+  geom_jitter(aes(group = Gene, sgRNA = sgrna),
+              width = 0.1, alpha = 0.6, show.legend = FALSE) +
+  stat_summary(aes(group = Gene, median_score = median(score)),
+               fun = median, geom = "crossbar", 
+               width = 0.4, color = "darkgrey", 
+               show.legend = FALSE) +
+  scale_color_manual(values = pnw_palette("Bay", type = "discrete"))
+
+ggplotly(p, tooltip = c("sgRNA", "y", "median_score"))
+```
+
+>Set different false discovery rate (FDR) or p value or Gene Score cut-offs to determine significance of gene hits (show a dotted line on graph) 
+Export figures into pdf/tiff/png
+
+## Comprehensive view of a single MAGeCK comparison:
+Service: Additional visualization tools for single analyses (MAGeCK comparisons)
+Deliverables:
+>Show inverse (-log10) Gene Scores for a comparison with Y-axis set at the median of NTCs. Scores above the median = positive gene scores. Scores below the median = negative gene scores.
+
+**isn't this already what control normalization does?**
+
+>Dot Plot where each dot is a Gene arrayed on X-axis by: random, alphabetical, gene category (i.e. Gene ontology Biological Process, Molecular function, or cellular component))
+
+how to link facets with plotly - try {crosstalk}? https://stackoverflow.com/a/54562147
+
+```{r}
+median_norm_long <- median_norm %>% 
+  select(id, `neg|score`, `pos|score`) %>%
+  pivot_longer(cols = -id, names_to = "score_type", values_to = "score")
+
+shared_median_norm_long <- SharedData$new(median_norm_long, key = ~ id)
+
+p <- shared_median_norm_long %>%   
+  ggplot(aes(x = id, y = -log10(score), color = score_type, text = score)) +
+  geom_point(alpha = 0.5,
+             show.legend = FALSE) +
+  facet_wrap(~ score_type) +
+  scale_color_brewer(palette = "Dark2") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  xlab(NULL) +
+  ggtitle("Click on point to highlight in both facets")
+
+ggplotly(p, tooltip = c("id", "text"))
+```
+
+Other Features: same as “Other Features” above
+
+Color the dots
+Example: this example shows enrichment/depletion of individual sgRNAs, but same idea would apply to displaying MAGeCK Gene Score data
+
+
+## Visualization tools for Comparison Plots
+Services: Develop visualization tools to compare across datasets (MAGeCK comparisons)
+Deliverables:
+Select 2 comparisons (check boxes to filter results by Experimenter, Virus, Cell line, etc) and show Gene Scores (select Positive or Negative) arrayed on X and Y axes
+color the dots
+Other Features: same as “Other Features” above
+
+Example:
+
+
+## Viewing with additional data types
+Services: Develop visualization tools to allow for our MAGeCK  data to be viewed together with other types of data
+Deliverables:
+Include other data types in database and view with MAGeCK analysis/metadata outputs. Such as RNAseq data from different cell types, cell lines, conditions, etc.
+Example: IFN Differential Expression Analysis
+needs to be done for a dataset and then can be contributed to Synapse?
+We could work with FH bioinformatics to generate and upload to Synapse:
+IFN induction in THPs, Jurkats, primary CD4+ T cells, etc
+
+Other Features: same as “Other Features” above
+
+Example:
+
+
+## Data pull stuff for later
+
+<!-- ## Get the sample sheet -->
+
+<!-- read in yaml file -->
+<!-- get treatment/control ids -->
+<!-- confirm identical to provenance info from mageck output file -->
+
+<!-- ```{r} -->
+<!-- syn23747991 <- synGet("syn23747991") -->
+
+<!-- samplesheet_yaml <- read_yaml(syn23747991$path) -->
+
+<!-- samplesheet_df <- samplesheet_yaml$comparisons %>%  -->
+<!--   as_tibble_col("comparisons") %>% -->
+<!--   unnest_wider(comparisons) %>% -->
+<!--   rename_all(~ str_replace(., "_synapse_ids", "")) %>%  -->
+<!--   unnest_wider(treatment, names_sep = "") %>%  -->
+<!--   unnest_wider(control, names_sep = "") %>%  -->
+<!--   select(-library_name) -->
+<!-- ``` -->
+
+<!-- ## Get the metadata -->
+
+<!-- Start with one file: -->
+
+<!-- ```{r} -->
+<!-- synGetAnnotations(samplesheet_df[[1, 2]]) %>%  -->
+<!--   enframe() %>%  -->
+<!--   unnest(cols = value) %>% view() -->
+
+<!-- synGetAnnotations("syn23702679") %>% -->
+<!--   as_tibble_row() %>%  -->
+<!--   unnest() -->
+<!-- ``` -->
+
+<!-- Now do the first comparison: -->
+
+<!-- ```{r} -->
+<!-- samplesheet_df %>%  -->
+<!--   slice(1) %>%  -->
+<!--   pivot_longer(-comparison_name, names_to = "sample_type", values_to = "synapse_id") %>%  -->
+<!--   mutate(annotations = map(synapse_id, synGetAnnotations)) %>%  -->
+<!--   unnest(unnest_wider(annotations))  -->
+
+
+<!-- ``` -->
+
