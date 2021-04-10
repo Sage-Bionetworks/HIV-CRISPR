@@ -20,6 +20,7 @@ ui <- fluidPage(
                  "input TBD"
                ),
                mainPanel(
+                 br(),
                  dataTableOutput("metadata")
                )
              )
@@ -53,9 +54,11 @@ ui <- fluidPage(
                  radioButtons("showdata", "Select output files to show:",
                               choices = list("median_norm.gene_summary" = "median_norm",
                                              "control_norm.gene_summary" = "control_norm"),
-                              selected = "median_norm")
+                              selected = "median_norm"),
+                 helpText("Use Ctrl/Cmd+click to select multiple rows. Search box accepts regular expressions (ie. use '|' for OR)")
                ),
                mainPanel(
+                 br(),
                  dataTableOutput("comp_data_table")
                )
              )
@@ -217,6 +220,7 @@ server <- function(input, output) {
   output$comp_data_table <- renderDataTable({
     
     datatable(df(),
+              options = list(search = list(regex = TRUE)),
               caption = paste0(input$showdata, ".gene_summary"))
     
   }) 
@@ -259,14 +263,21 @@ server <- function(input, output) {
   
   output$scatter_sgrna <- renderPlotly({
     
+    genes_from_table <- df() %>% 
+      filter(row_number() %in% input$comp_data_table_rows_selected) %>% 
+      pull(id)
+      
+    
     p4 <- median_norm_sgRNA %>% 
-      filter(Gene %in% input$pickgenes2) %>% 
+      #filter(Gene %in% input$pickgenes2) %>% 
+      filter(Gene %in% genes_from_table) %>% 
       ggplot(aes(x = Gene, y = score, color = Gene)) + 
       geom_jitter(aes(group = Gene, sgRNA = sgrna),
                   width = 0.1, alpha = 0.6) +
       stat_summary(aes(group = Gene),
                    fun = median, geom = "crossbar", 
                    width = 0.4, color = "darkgrey") +
+      coord_flip() +
       scale_color_viridis_d() +
       theme(legend.position = "none") +
       ggtitle("Individual sgRNA scores for selected genes")
