@@ -39,7 +39,7 @@ ui <- fluidPage(
                mainPanel(
                  br(),
                  dataTableOutput("comp_data_table"),
-                 verbatimTextOutput("selection_info")
+                 verbatimTextOutput("selection_info1")
                )
              )
              
@@ -48,20 +48,13 @@ ui <- fluidPage(
              sidebarLayout(
                sidebarPanel(
                  br(),
-                 helpText("Uncheck the box to select specific sgRNAs 
-                          (plot will only show with 3 or more selections)"),
+                 helpText("Uncheck the box to use gene selection from Data tab."),
                  checkboxInput("selectall", "Plot all sgRNAs", value = TRUE),
-                 conditionalPanel(
-                   condition = "input.selectall == false",
-                   selectizeInput("pickgenes1", "Choose sgRNA(s) to plot:",
-                                  choices = treatment_joined$sgRNA,
-                                  multiple = TRUE,
-                                  selected = c("CASP2_0", "CASP2_1", "CASP2_3"))
-                 )
                ),
                mainPanel(
                  br(),
-                 plotlyOutput("scatter_r2")
+                 plotlyOutput("scatter_r2"),
+                 verbatimTextOutput("selection_info2")
                )
              )
              
@@ -151,7 +144,12 @@ server <- function(input, output) {
   })
   
   # print list of selected genes
-  output$selection_info <- renderPrint({
+  # do it multiple times bc can't reuse same output
+  output$selection_info1 <- renderPrint({
+    genes_from_table()
+  })
+  
+  output$selection_info2 <- renderPrint({
     genes_from_table()
   })
   
@@ -162,14 +160,16 @@ server <- function(input, output) {
       treatment_joined
     } else {
       treatment_joined %>% 
-        filter(sgRNA %in% input$pickgenes1)
+        #filter(sgRNA %in% input$pickgenes1)
+        filter(str_detect(sgRNA, str_c(genes_from_table(), collapse = "|")))
     }
     
     control_joined <- if (input$selectall == TRUE) {
       control_joined
     } else {
       control_joined %>% 
-        filter(sgRNA %in% input$pickgenes1)
+        #filter(sgRNA %in% input$pickgenes1)
+        filter(str_detect(sgRNA, str_c(genes_from_table(), collapse = "|")))
     }
     
     treatment_r2 <- round(cor.test(treatment_joined$Dragonite_20201201_1.fastq,
