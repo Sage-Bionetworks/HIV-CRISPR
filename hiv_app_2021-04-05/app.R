@@ -26,6 +26,22 @@ ui <- fluidPage(
              )
              
     ),    
+    tabPanel("Output data",
+             sidebarLayout(
+               sidebarPanel(
+                 radioButtons("showdata", "Select output files to show:",
+                              choices = list("median_norm.gene_summary" = "median_norm",
+                                             "control_norm.gene_summary" = "control_norm"),
+                              selected = "median_norm"),
+                 helpText("Use Ctrl/Cmd+click to select multiple rows. Search box accepts regular expressions (ie. use '|' for OR)")
+               ),
+               mainPanel(
+                 br(),
+                 dataTableOutput("comp_data_table")
+               )
+             )
+             
+    ),
     tabPanel("QC",
              sidebarLayout(
                sidebarPanel(
@@ -44,22 +60,6 @@ ui <- fluidPage(
                mainPanel(
                  br(),
                  plotlyOutput("scatter_r2")
-               )
-             )
-             
-    ),
-    tabPanel("Output data",
-             sidebarLayout(
-               sidebarPanel(
-                 radioButtons("showdata", "Select output files to show:",
-                              choices = list("median_norm.gene_summary" = "median_norm",
-                                             "control_norm.gene_summary" = "control_norm"),
-                              selected = "median_norm"),
-                 helpText("Use Ctrl/Cmd+click to select multiple rows. Search box accepts regular expressions (ie. use '|' for OR)")
-               ),
-               mainPanel(
-                 br(),
-                 dataTableOutput("comp_data_table")
                )
              )
              
@@ -115,34 +115,7 @@ server <- function(input, output) {
       datatable(caption = "Metadata for this comparison, pulled from treatment replicate 1")
   })
   
-  
-  # QC dumbbell plot
-  # output$dumbbell <- renderPlotly({
-  #   
-  #   pal <- pnw_palette("Bay", 2)
-  #   
-  #   treatment_joined %>% 
-  #     mutate(diff = abs(Dragonite_20201201_2.fastq - Dragonite_20201201_1.fastq)) %>% 
-  #     arrange(desc(diff)) %>% 
-  #     slice(1:input$topn) %>%
-  #     mutate(sgRNA = fct_reorder(as.factor(sgRNA), diff)) %>% 
-  #     plot_ly(hovertemplate = "%{y}: %{x}<extra></extra>") %>% 
-  #     add_segments(x = ~Dragonite_20201201_1.fastq, 
-  #                  xend = ~Dragonite_20201201_2.fastq,
-  #                  y = ~sgRNA, yend = ~sgRNA,
-  #                  color = I("grey80"),
-  #                  showlegend = FALSE) %>% 
-  #     add_markers(x = ~Dragonite_20201201_1.fastq, y = ~sgRNA, 
-  #                 color = I(pal[1]),
-  #                 name = "Dragonite_20201201_1.fastq") %>% 
-  #     add_markers(x = ~Dragonite_20201201_2.fastq, y = ~sgRNA, 
-  #                 color = I(pal[2]),
-  #                 name = "Dragonite_20201201_2.fastq") %>% 
-  #     layout(title = paste0("Top ", input$topn, " most different sgRNAs between treatment replicates,\nordered by difference"),
-  #            xaxis = list(title = "count"),
-  #            yaxis = list(title = ""))
-  # })
-  
+
   # QC scatter plot with R2 value
   output$scatter_r2 <- renderPlotly({
     
@@ -164,8 +137,7 @@ server <- function(input, output) {
                                    treatment_joined$Dragonite_20201201_2.fastq,
                                    method = "pearson")$estimate ^ 2, 2)
     
-    
-    p1 <- treatment_joined %>%
+      p1 <- treatment_joined %>%
       ggplot(aes(x = Dragonite_20201201_1.fastq, 
                  y = Dragonite_20201201_2.fastq,
                  dummy = sgRNA, group = 1)) +
@@ -205,7 +177,7 @@ server <- function(input, output) {
             titleY = TRUE)
   })
   
-  # pick dataset
+  # choose dataset
   
   df <- reactive({
     if (input$showdata == "median_norm"){
