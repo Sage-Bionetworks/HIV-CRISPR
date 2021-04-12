@@ -33,11 +33,13 @@ ui <- fluidPage(
                               choices = list("median_norm.gene_summary" = "median_norm",
                                              "control_norm.gene_summary" = "control_norm"),
                               selected = "median_norm"),
-                 helpText("Use Ctrl/Cmd+click to select multiple rows. Search box accepts regular expressions (ie. use '|' for OR)")
+                 helpText("Use Ctrl/Cmd+click to select multiple rows for plotting. Selected genes will be listed below. Search box accepts regular expressions (ie. use '|' for OR)"),
+                 actionButton("clear", "Clear selections")
                ),
                mainPanel(
                  br(),
-                 dataTableOutput("comp_data_table")
+                 dataTableOutput("comp_data_table"),
+                 verbatimTextOutput("selection_info")
                )
              )
              
@@ -52,9 +54,9 @@ ui <- fluidPage(
                  conditionalPanel(
                    condition = "input.selectall == false",
                    selectizeInput("pickgenes1", "Choose sgRNA(s) to plot:",
-                                 choices = treatment_joined$sgRNA,
-                                 multiple = TRUE,
-                                 selected = c("CASP2_0", "CASP2_1", "CASP2_3"))
+                                  choices = treatment_joined$sgRNA,
+                                  multiple = TRUE,
+                                  selected = c("CASP2_0", "CASP2_1", "CASP2_3"))
                  )
                ),
                mainPanel(
@@ -115,7 +117,44 @@ server <- function(input, output) {
       datatable(caption = "Metadata for this comparison, pulled from treatment replicate 1")
   })
   
-
+  # choose dataset
+  df <- reactive({
+    if (input$showdata == "median_norm"){
+      df <- median_norm
+    } else {
+      df <- control_norm
+    }
+  })
+  
+  # show data for single comparison
+  output$comp_data_table <- renderDataTable({
+    
+    datatable(df(),
+              options = list(search = list(regex = TRUE)),
+              caption = paste0(input$showdata, ".gene_summary"))
+    
+  }) 
+  
+  # set up proxy for "Clear Selections" button
+  proxy <- dataTableProxy("comp_data_table")
+  
+  # action when "Clear Selections" button is clicked
+  observeEvent(input$clear, {
+    proxy %>% selectRows(NULL)
+  })
+  
+  # pull vector of gene selections from datatable
+  genes_from_table <- reactive({
+    df() %>%
+      filter(row_number() %in% input$comp_data_table_rows_selected) %>%
+      pull(id)
+  })
+  
+  # print list of selected genes
+  output$selection_info <- renderPrint({
+    genes_from_table()
+  })
+  
   # QC scatter plot with R2 value
   output$scatter_r2 <- renderPlotly({
     
@@ -137,7 +176,7 @@ server <- function(input, output) {
                                    treatment_joined$Dragonite_20201201_2.fastq,
                                    method = "pearson")$estimate ^ 2, 2)
     
-      p1 <- treatment_joined %>%
+    p1 <- treatment_joined %>%
       ggplot(aes(x = Dragonite_20201201_1.fastq, 
                  y = Dragonite_20201201_2.fastq,
                  dummy = sgRNA, group = 1)) +
@@ -177,26 +216,6 @@ server <- function(input, output) {
             titleY = TRUE)
   })
   
-  # choose dataset
-  
-  df <- reactive({
-    if (input$showdata == "median_norm"){
-      df <- median_norm
-    } else {
-      df <- control_norm
-    }
-  })
-  
-  
-  # show data for single comparison
-  output$comp_data_table <- renderDataTable({
-    
-    datatable(df(),
-              options = list(search = list(regex = TRUE)),
-              caption = paste0(input$showdata, ".gene_summary"))
-    
-  }) 
-  
   # top 20 ranked genes
   output$gene_bar <- renderPlotly({
     
@@ -233,16 +252,12 @@ server <- function(input, output) {
     
   })
   
+  # scatter plot of individual sgRNAs for each gene
   output$scatter_sgrna <- renderPlotly({
-    
-    genes_from_table <- df() %>% 
-      filter(row_number() %in% input$comp_data_table_rows_selected) %>% 
-      pull(id)
-      
     
     p4 <- median_norm_sgRNA %>% 
       #filter(Gene %in% input$pickgenes2) %>% 
-      filter(Gene %in% genes_from_table) %>% 
+      filter(Gene %in% genes_from_table()) %>% 
       ggplot(aes(x = Gene, y = score, color = Gene)) + 
       geom_jitter(aes(group = Gene, sgRNA = sgrna),
                   width = 0.1, alpha = 0.6) +
