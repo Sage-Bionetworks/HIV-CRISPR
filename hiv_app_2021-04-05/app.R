@@ -4,7 +4,6 @@ library(tidyverse)
 library(DT)
 library(plotly)
 library(crosstalk)
-library(PNWColors)
 
 # Load cached data from Synapse
 load("test_comp_data.RData")
@@ -33,13 +32,18 @@ ui <- fluidPage(
                               choices = list("median_norm.gene_summary" = "median_norm",
                                              "control_norm.gene_summary" = "control_norm"),
                               selected = "median_norm"),
-                 helpText("Use Ctrl/Cmd+click to select multiple rows for plotting. Selected genes will be listed below. Search box accepts regular expressions (ie. use '|' for OR)"),
-                 actionButton("clear", "Clear selections")
+                 helpText("Click to select multiple rows for plotting. Selected genes will be listed below. Search box accepts regular expressions (ie. use '|' for OR)"),
+                 actionButton("clear", "Clear selections"),
+                 br(),
+                 br(),
+                 wellPanel(
+                   p("Selected genes: ", 
+                     textOutput("selection_info1", inline = TRUE))
+                 )
                ),
                mainPanel(
                  br(),
-                 dataTableOutput("comp_data_table"),
-                 verbatimTextOutput("selection_info1")
+                 dataTableOutput("comp_data_table")
                )
              )
              
@@ -49,12 +53,34 @@ ui <- fluidPage(
                sidebarPanel(
                  br(),
                  helpText("Uncheck the box to use gene selection from Data tab."),
-                 checkboxInput("selectall", "Plot all sgRNAs", value = TRUE),
+                 checkboxInput("selectall_qc", "Plot all sgRNAs", value = TRUE),
+                 br(),
+                 conditionalPanel(
+                   condition = "input.selectall_qc == 0",
+                   wellPanel(
+                     p("Selected genes: ", 
+                       textOutput("selection_info2", inline = TRUE))
+                   ))
                ),
                mainPanel(
                  br(),
-                 plotlyOutput("scatter_r2"),
-                 verbatimTextOutput("selection_info2")
+                 plotlyOutput("scatter_r2")
+               )
+             )
+             
+    ),
+    tabPanel("Individual sgRNAs",
+             sidebarLayout(
+               sidebarPanel(
+                 helpText("Use the Data tab to select genes to plot. Vertical lines indicate median of group."),
+                 br(),
+                 wellPanel(
+                   p("Selected genes: ", 
+                     textOutput("selection_info3", inline = TRUE))
+                 )
+               ),
+               mainPanel(
+                 plotlyOutput("scatter_sgrna")
                )
              )
              
@@ -62,6 +88,17 @@ ui <- fluidPage(
     tabPanel("Ranked gene summary",
              sidebarLayout(
                sidebarPanel(
+                 br(),
+                 helpText("Uncheck the box to use gene selection from Data tab."),
+                 checkboxInput("selectall_bar", "Rank all genes", value = TRUE),
+                 br(),
+                 conditionalPanel(
+                   condition = "input.selectall_bar == 0",
+                   wellPanel(
+                     p("Selected genes: ", 
+                       textOutput("selection_info4", inline = TRUE))
+                   )
+                 ),
                  sliderInput("topn", "Number of genes to plot:",
                              min = 1, max = 50, value = 20),
                  helpText("Rank by:"),
@@ -73,21 +110,6 @@ ui <- fluidPage(
                ),
                mainPanel(
                  plotlyOutput("gene_bar")
-               )
-             )
-             
-    ),
-    tabPanel("Individual sgRNAs",
-             sidebarLayout(
-               sidebarPanel(
-                 selectizeInput("pickgenes2", "Choose genes to plot:",
-                                choices = median_norm$id,
-                                multiple = TRUE,
-                                selected = "CASP2")
-               ),
-               mainPanel(
-                 plotlyOutput("scatter_sgrna"),
-                 p("Grey line indicates median of group")
                )
              )
              
@@ -110,19 +132,19 @@ server <- function(input, output) {
       datatable(caption = "Metadata for this comparison, pulled from treatment replicate 1")
   })
   
-  # choose dataset
-  df <- reactive({
+  # choose dataset for Data tab
+  df_gene <- reactive({
     if (input$showdata == "median_norm"){
-      df <- median_norm
+      df_gene <- median_norm
     } else {
-      df <- control_norm
+      df_gene <- control_norm
     }
   })
   
   # show data for single comparison
   output$comp_data_table <- renderDataTable({
     
-    datatable(df(),
+    datatable(df_gene(),
               options = list(search = list(regex = TRUE)),
               caption = paste0(input$showdata, ".gene_summary"))
     
@@ -138,40 +160,41 @@ server <- function(input, output) {
   
   # pull vector of gene selections from datatable
   genes_from_table <- reactive({
-    df() %>%
+    df_gene() %>%
       filter(row_number() %in% input$comp_data_table_rows_selected) %>%
       pull(id)
   })
   
   # print list of selected genes
   # do it multiple times bc can't reuse same output
-  output$selection_info1 <- renderPrint({
-    genes_from_table()
-  })
-  
-  output$selection_info2 <- renderPrint({
-    genes_from_table()
-  })
+  output$selection_info1 <- 
+    output$selection_info2 <- 
+    output$selection_info3 <-
+    output$selection_info4 <-
+    renderText({
+      genes_from_table()
+    },
+    sep = ", ")
   
   # QC scatter plot with R2 value
   output$scatter_r2 <- renderPlotly({
     
-    treatment_joined <- if (input$selectall == TRUE) {
+    # plot all genes or a subset, based on input
+    treatment_joined <- if (input$selectall_qc == TRUE) {
       treatment_joined
     } else {
       treatment_joined %>% 
-        #filter(sgRNA %in% input$pickgenes1)
         filter(str_detect(sgRNA, str_c(genes_from_table(), collapse = "|")))
     }
     
-    control_joined <- if (input$selectall == TRUE) {
+    control_joined <- if (input$selectall_qc == TRUE) {
       control_joined
     } else {
       control_joined %>% 
-        #filter(sgRNA %in% input$pickgenes1)
         filter(str_detect(sgRNA, str_c(genes_from_table(), collapse = "|")))
     }
     
+    # calculate R2 and plot treatment replicates
     treatment_r2 <- round(cor.test(treatment_joined$Dragonite_20201201_1.fastq,
                                    treatment_joined$Dragonite_20201201_2.fastq,
                                    method = "pearson")$estimate ^ 2, 2)
@@ -183,15 +206,14 @@ server <- function(input, output) {
       geom_point() +
       geom_smooth(method = "lm", 
                   formula = "y ~ x",
-                  se = FALSE) +
-      annotate("text", label = paste0("R^2 = ", treatment_r2), 
-               x = min(treatment_joined$Dragonite_20201201_1.fastq), y
-               = max(treatment_joined$Dragonite_20201201_2.fastq)) +
-      labs(title = "Counts in treatment (left) and control (right) replicates")
-    
+                  se = FALSE) 
+
     fig1 <- ggplotly(p1) %>% 
-      style(textposition = "right")
+      add_annotations(text = paste0("R^2 = ", treatment_r2),
+                      x = 0, y = 1, xref = "x", yref = "paper", 
+                      xanchor = "left", showarrow = FALSE)
     
+    # calculate R2 and plot control replicates
     control_r2 <- round(cor.test(control_joined$Dragonite_20201201_17.fastq,
                                  control_joined$Dragonite_20201201_18.fastq,
                                  method = "pearson")$estimate ^ 2, 2)
@@ -203,38 +225,71 @@ server <- function(input, output) {
       geom_point() +
       geom_smooth(method = "lm", 
                   formula = "y ~ x",
-                  se = FALSE) +
-      annotate("text", label = paste0("R^2 = ", control_r2), 
-               x = min(control_joined$Dragonite_20201201_17.fastq), 
-               y = max(control_joined$Dragonite_20201201_18.fastq))
-    
+                  se = FALSE) 
+
     fig2 <- ggplotly(p2) %>% 
-      style(textposition = "right")
+      add_annotations(text = paste0("R^2 = ", control_r2), 
+                      x = 0, y = 1, xref = "x", yref = "paper", 
+                      xanchor = "left", showarrow = FALSE)
     
+    # put the two plots together
     subplot(fig1, fig2,
             titleX = TRUE,
-            titleY = TRUE)
+            titleY = TRUE) %>% 
+      layout(title = "Counts in treatment (left) and control (right) replicates",
+             margin = list(t = 50))
   })
   
   # top 20 ranked genes
   output$gene_bar <- renderPlotly({
     
-    df_top20 <- df() %>% 
-      select(id, `neg|score`, `neg|rank`, 
-             `pos|rank`, `pos|score`,
-             `neg|p-value`, `pos|p-value`) %>%
-      pivot_longer(cols = ends_with("rank"), names_to = "rank_type", values_to = "rank") %>% 
-      pivot_longer(cols = ends_with("score"), names_to = "score_type", values_to = "score") %>% 
-      pivot_longer(cols = ends_with("value"), names_to = "p_type", values_to = "p_value") %>% 
-      arrange(rank) %>% 
-      filter(rank <= input$topn) %>%
-      filter(case_when(rank_type == "neg|rank" ~ score_type == "neg|score",
-                       rank_type == "pos|rank" ~ score_type == "pos|score")) %>%
-      filter(case_when(rank_type == "neg|rank" ~ p_type == "neg|p-value",
-                       rank_type == "pos|rank" ~ p_type == "pos|p-value")) 
+    df_genebar <- if (input$selectall_bar == TRUE) {
+      df_gene() %>% 
+        select(id, `neg|score`, `neg|rank`, 
+               `pos|rank`, `pos|score`,
+               `neg|p-value`, `pos|p-value`) %>%
+        pivot_longer(cols = ends_with("rank"), names_to = "rank_type", values_to = "rank") %>% 
+        pivot_longer(cols = ends_with("score"), names_to = "score_type", values_to = "score") %>% 
+        pivot_longer(cols = ends_with("value"), names_to = "p_type", values_to = "p_value") %>% 
+        arrange(rank) %>% 
+        filter(rank <= input$topn) %>%
+        filter(case_when(rank_type == "neg|rank" ~ score_type == "neg|score",
+                         rank_type == "pos|rank" ~ score_type == "pos|score")) %>%
+        filter(case_when(rank_type == "neg|rank" ~ p_type == "neg|p-value",
+                         rank_type == "pos|rank" ~ p_type == "pos|p-value"))
+    } else {
+      df_gene() %>% 
+        filter(id %in% genes_from_table()) %>% 
+        select(id, `neg|score`, `neg|rank`, 
+               `pos|rank`, `pos|score`,
+               `neg|p-value`, `pos|p-value`) %>%
+        pivot_longer(cols = ends_with("rank"), names_to = "rank_type", values_to = "rank") %>% 
+        pivot_longer(cols = ends_with("score"), names_to = "score_type", values_to = "score") %>% 
+        pivot_longer(cols = ends_with("value"), names_to = "p_type", values_to = "p_value") %>% 
+        #arrange(rank) %>% 
+        #filter(rank <= input$topn) %>%
+        filter(case_when(rank_type == "neg|rank" ~ score_type == "neg|score",
+                         rank_type == "pos|rank" ~ score_type == "pos|score")) %>%
+        filter(case_when(rank_type == "neg|rank" ~ p_type == "neg|p-value",
+                         rank_type == "pos|rank" ~ p_type == "pos|p-value"))
+    }
+    
+    # df_top20 <- df_gene() %>% 
+    #   select(id, `neg|score`, `neg|rank`, 
+    #          `pos|rank`, `pos|score`,
+    #          `neg|p-value`, `pos|p-value`) %>%
+    #   pivot_longer(cols = ends_with("rank"), names_to = "rank_type", values_to = "rank") %>% 
+    #   pivot_longer(cols = ends_with("score"), names_to = "score_type", values_to = "score") %>% 
+    #   pivot_longer(cols = ends_with("value"), names_to = "p_type", values_to = "p_value") %>% 
+    #   arrange(rank) %>% 
+    #   filter(rank <= input$topn) %>%
+    #   filter(case_when(rank_type == "neg|rank" ~ score_type == "neg|score",
+    #                    rank_type == "pos|rank" ~ score_type == "pos|score")) %>%
+    #   filter(case_when(rank_type == "neg|rank" ~ p_type == "neg|p-value",
+    #                    rank_type == "pos|rank" ~ p_type == "pos|p-value")) 
     
     
-    p3 <- df_top20 %>% 
+    p3 <- df_genebar %>% 
       ggplot(aes(y = fct_reorder(id, -rank), x = -log10(score),
                  fill = case_when(input$fillby == "ntc" ~ id %in% CUL3_synNTC_list,
                                   input$fillby == "pval" ~ p_value <= 0.01),
@@ -252,21 +307,30 @@ server <- function(input, output) {
     
   })
   
+  # choose dataset for sgRNA tab
+  df_sgRNA <- reactive({
+    if (input$showdata == "median_norm"){
+      df_sgRNA <- median_norm_sgRNA
+    } else {
+      df_sgRNA <- control_norm_sgRNA
+    }
+  })
+  
   # scatter plot of individual sgRNAs for each gene
   output$scatter_sgrna <- renderPlotly({
     
-    p4 <- median_norm_sgRNA %>% 
-      #filter(Gene %in% input$pickgenes2) %>% 
+    p4 <- df_sgRNA() %>% 
       filter(Gene %in% genes_from_table()) %>% 
-      ggplot(aes(x = Gene, y = score, color = Gene)) + 
+      ggplot(aes(x = Gene, y = score, fill = Gene)) + 
       geom_jitter(aes(group = Gene, sgRNA = sgrna),
-                  width = 0.1, alpha = 0.6) +
+                  width = 0.1, alpha = 0.6, shape = 21) +
       stat_summary(aes(group = Gene),
                    fun = median, geom = "crossbar", 
-                   width = 0.4, color = "darkgrey") +
+                   width = 0.5) +
       coord_flip() +
-      scale_color_viridis_d() +
+      scale_fill_viridis_d() +
       theme(legend.position = "none") +
+      xlab(NULL) +
       ggtitle("Individual sgRNA scores for selected genes")
     
     ggplotly(p4, tooltip = c("sgRNA", "y"))

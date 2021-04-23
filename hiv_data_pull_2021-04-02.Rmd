@@ -21,6 +21,21 @@ library(crosstalk)
 library(PNWColors)
 ```
 
+Data types:
+- comparisons - yaml files
+- count files (input) - 2 replicates tx & control
+- output - 3 types
+- library files (library vs NTC list)
+- metadata for all files
+
+Qs for Andrew:
+- general workflow with RStudio, where to save projects
+- Do I need AWS, VPN
+- Pulling data from Synapse is slow, should I cache & how to
+- how to add Synapse login to Shiny app
+- anything else about Shiny for "production" - should I use modules?
+
+
 ## Strategy:
 
 1. figure out data and make individual plots

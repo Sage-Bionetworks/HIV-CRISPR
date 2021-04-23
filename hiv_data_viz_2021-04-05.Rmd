@@ -47,14 +47,14 @@ Start with one comparison - figure out programmatic data pull later as workflow 
 Sample sheet `20201230_Dragonite_Comp2.yaml`, first comparison 
 
 ```
-  - comparison_name: 20201230_Dragonite_Lat_CUL3_5A8v1WT
-    library_name: CUL3
-    treatment_synapse_ids:
-      - syn23702679
-      - syn23702680
-    control_synapse_ids:
-      - syn23702681
-      - syn23702682
+- comparison_name: 20201230_Dragonite_Lat_CUL3_5A8v1WT
+library_name: CUL3
+treatment_synapse_ids:
+- syn23702679
+- syn23702680
+control_synapse_ids:
+- syn23702681
+- syn23702682
 ```
 
 Get the synapse entities:
@@ -141,27 +141,27 @@ hide trace name from tooltip: https://community.plotly.com/t/possible-to-hide-le
 
 ```{r}
 pal <- pnw_palette("Bay", 2)
-    
-    treatment_joined %>% 
-      mutate(diff = abs(Dragonite_20201201_2.fastq - Dragonite_20201201_1.fastq)) %>% 
-      arrange(desc(diff)) %>% 
-      slice(1:20) %>%
-      mutate(sgRNA = fct_reorder(as.factor(sgRNA), diff)) %>% 
-      plot_ly(hovertemplate = "%{y}: %{x}<extra></extra>") %>% 
-      add_segments(x = ~Dragonite_20201201_1.fastq, 
-                   xend = ~Dragonite_20201201_2.fastq,
-                   y = ~sgRNA, yend = ~sgRNA,
-                   color = I("grey80"),
-                   showlegend = FALSE) %>% 
-      add_markers(x = ~Dragonite_20201201_1.fastq, y = ~sgRNA, 
-                  color = I(pal[1]),
-                  name = "Dragonite_20201201_1.fastq") %>% 
-      add_markers(x = ~Dragonite_20201201_2.fastq, y = ~sgRNA, 
-                  color = I(pal[2]),
-                  name = "Dragonite_20201201_2.fastq") %>% 
-      layout(title = "Top 20 most different sgRNAs between treatment replicates,\nordered by difference",
-             xaxis = list(title = "count"),
-             yaxis = list(title = ""))
+
+treatment_joined %>% 
+  mutate(diff = abs(Dragonite_20201201_2.fastq - Dragonite_20201201_1.fastq)) %>% 
+  arrange(desc(diff)) %>% 
+  slice(1:20) %>%
+  mutate(sgRNA = fct_reorder(as.factor(sgRNA), diff)) %>% 
+  plot_ly(hovertemplate = "%{y}: %{x}<extra></extra>") %>% 
+  add_segments(x = ~Dragonite_20201201_1.fastq, 
+               xend = ~Dragonite_20201201_2.fastq,
+               y = ~sgRNA, yend = ~sgRNA,
+               color = I("grey80"),
+               showlegend = FALSE) %>% 
+  add_markers(x = ~Dragonite_20201201_1.fastq, y = ~sgRNA, 
+              color = I(pal[1]),
+              name = "Dragonite_20201201_1.fastq") %>% 
+  add_markers(x = ~Dragonite_20201201_2.fastq, y = ~sgRNA, 
+              color = I(pal[2]),
+              name = "Dragonite_20201201_2.fastq") %>% 
+  layout(title = "Top 20 most different sgRNAs between treatment replicates,\nordered by difference",
+         xaxis = list(title = "count"),
+         yaxis = list(title = ""))
 ```
 
 
@@ -173,8 +173,8 @@ pal <- pnw_palette("Bay", 2)
 
 ```{r}
 treatment_r2 <- round(cor.test(treatment_joined$Dragonite_20201201_1.fastq,
-                         treatment_joined$Dragonite_20201201_2.fastq,
-                         method = "pearson")$estimate ^ 2, 2)
+                               treatment_joined$Dragonite_20201201_2.fastq,
+                               method = "pearson")$estimate ^ 2, 2)
 
 p1 <- treatment_joined %>% 
   ggplot(aes(x = Dragonite_20201201_1.fastq, 
@@ -193,8 +193,8 @@ fig1 <- ggplotly(p1) %>%
   style(textposition = "right")
 
 control_r2 <- round(cor.test(control_joined$Dragonite_20201201_17.fastq,
-                         control_joined$Dragonite_20201201_18.fastq,
-                         method = "pearson")$estimate ^ 2, 2)
+                             control_joined$Dragonite_20201201_18.fastq,
+                             method = "pearson")$estimate ^ 2, 2)
 
 p2 <- control_joined %>% 
   ggplot(aes(x = Dragonite_20201201_17.fastq, 
@@ -293,17 +293,17 @@ TEST FOR SHINY:
 test <- "pval"
 
 median_norm_top20 %>% 
-      ggplot(aes(y = fct_reorder(id, -rank), x = -log10(score),
-                 fill = case_when(test == "ntc" ~ id %in% CUL3_synNTC_list,
-                                  test == "pval" ~ p_value <= 0.01),
-                 rank = rank, score = score, p = p_value)) +
-      geom_col() +
-      facet_wrap(~rank_type, scales = "free_y") +
-      scale_fill_brewer(palette = "Dark2",
-                        name = "gene in NTC list") +
-      ylab(NULL) +
-      xlab("-log10 MAGeCK gene score") +
-      ggtitle(paste0("Top 20 highest-ranked genes"))
+  ggplot(aes(y = fct_reorder(id, -rank), x = -log10(score),
+             fill = case_when(test == "ntc" ~ id %in% CUL3_synNTC_list,
+                              test == "pval" ~ p_value <= 0.01),
+             rank = rank, score = score, p = p_value)) +
+  geom_col() +
+  facet_wrap(~rank_type, scales = "free_y") +
+  scale_fill_brewer(palette = "Dark2",
+                    name = "gene in NTC list") +
+  ylab(NULL) +
+  xlab("-log10 MAGeCK gene score") +
+  ggtitle(paste0("Top 20 highest-ranked genes"))
 ```
 
 
@@ -405,18 +405,45 @@ median_norm_long <- median_norm %>%
   select(id, `neg|score`, `pos|score`) %>%
   pivot_longer(cols = -id, names_to = "score_type", values_to = "score")
 
-shared_median_norm_long <- SharedData$new(median_norm_long, key = ~ id)
+median_norm_long_ntc <- median_norm_long %>% 
+  filter(str_detect(id, "NTC"))
 
-p <- shared_median_norm_long %>%   
-  ggplot(aes(x = id, y = -log10(score), color = score_type, text = score)) +
-  geom_point(alpha = 0.5,
+shared_median_norm_long <- SharedData$new(median_norm_long, key = ~ id)
+shared_median_norm_long_ntc <- SharedData$new(median_norm_long_ntc, key = ~ id)
+
+median_norm_long_ntc %>% 
+  filter(score_type == "neg|score") %>% 
+  pull(score) %>% 
+  median() %>% 
+  log10()
+# 0.327; log = 0.485
+
+median_norm_long_ntc %>% 
+  filter(score_type == "pos|score") %>% 
+  pull(score) %>% 
+  median() %>% 
+  log10()
+# 0.47; log = .328
+
+
+# p <-
+
+shared_median_norm_long %>%   
+  ggplot(aes(x = fct_shuffle(as.factor(id)), y = -log10(score), fill = score_type, text = score)) +
+  geom_point(alpha = 0.5, shape = 21, size = 2,
              show.legend = FALSE) +
+  geom_point(data = shared_median_norm_long_ntc,
+             aes(x = id, y = -log10(score)),
+             shape = 21, size = 2,
+             fill = "white") +
   facet_wrap(~ score_type) +
   scale_color_brewer(palette = "Dark2") +
   theme(axis.text.x = element_blank(),
         axis.ticks.x = element_blank()) +
-  xlab(NULL) +
-  ggtitle("Click on point to highlight in both facets")
+  xlab(NULL)
+
+# +
+#   ggtitle("Click on point to highlight in both facets")
 
 ggplotly(p, tooltip = c("id", "text"))
 ```
@@ -435,6 +462,58 @@ color the dots
 Other Features: same as “Other Features” above
 
 Example:
+
+
+> Dot Plot (after talking to the lab):
+
+Take median of NTCs from `median_norm` file
+Plot genes whose neg|score is below neg median; genes whose pos|score is below pos median
+
+**This still seems weird. How to deal with 2 medians (pos and neg), and what about the genes that are below median for both? And the NTCs have a wide range of scores so it's not going to look like the example plot.**
+
+```{r}
+ntc_median_neg <- median_norm %>% 
+  filter(str_detect(id, "NTC")) %>%
+  pull(`neg|score`) %>% 
+  median()
+
+ntc_median_pos <- median_norm %>% 
+  filter(str_detect(id, "NTC")) %>% 
+  pull(`pos|score`) %>% 
+  median()
+
+neg_genes <- median_norm %>% 
+  filter(`neg|score` <= ntc_median_neg) %>% 
+  select(id, `neg|score`) %>% 
+  pivot_longer(cols = -id,
+               names_to = "score_type",
+               values_to = "score")
+
+pos_genes <- median_norm %>% 
+  filter(`pos|score` <= ntc_median_pos) %>% 
+  select(id, `pos|score`)  %>% 
+  pivot_longer(cols = -id,
+               names_to = "score_type",
+               values_to = "score") %>% 
+  arrange(score)
+
+# see which genes are both >= pos and <= neg 
+genes_both_pos_neg <- bind_rows(neg_genes, pos_genes) %>% 
+  group_by(id) %>% 
+  count() %>% 
+  filter(n != 1)
+
+bind_rows(neg_genes, pos_genes) %>% 
+  mutate(alt_score = case_when(score_type == "neg|score" ~ 0 - score,
+                               TRUE ~ score)) %>%
+  mutate(color = case_when(str_detect(id, "NTC") ~ "white",
+                           score_type == "neg|score" ~ "blue",
+                           score_type == "pos|score" ~ "red")) %>%
+  ggplot(aes(x = fct_reorder(as.factor(id), alt_score), y = alt_score, fill = color)) +
+  geom_point(alpha = 0.5, shape = 21) +
+  scale_fill_identity()
+```
+
 
 
 ## Viewing with additional data types
