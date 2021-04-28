@@ -1,6 +1,7 @@
 
 library(shiny)
 library(tidyverse)
+library(tidytext)
 library(DT)
 library(plotly)
 library(crosstalk)
@@ -92,24 +93,37 @@ ui <- fluidPage(
                  helpText("Uncheck the box to use gene selection from Data tab."),
                  checkboxInput("selectall_bar", "Rank all genes", value = TRUE),
                  br(),
+                 # show selected genes if "rank all genes" is unchecked
                  conditionalPanel(
                    condition = "input.selectall_bar == 0",
                    wellPanel(
-                     p("Selected genes: ", 
+                     p("Plot selected genes: ", 
                        textOutput("selection_info4", inline = TRUE))
                    )
                  ),
-                 sliderInput("topn", "Number of genes to plot:",
-                             min = 1, max = 50, value = 20),
-                 helpText("Rank by:"),
+                 # only show slider if "rank all genes" is checked
+                 conditionalPanel(
+                   condition = "input.selectall_bar == 1",
+                   sliderInput("topn", "Number of genes to plot:",
+                               min = 1, max = 50, value = 20)
+                 ),
+                 helpText("Rank by - add later"),
                  radioButtons("fillby", "Fill bars by:",
                               choices = list("gene in NTC list" = "ntc",
                                              "p <= 0.01" = "pval"),
                               selected = "ntc"),
-                 helpText("FDR; score")
+                 helpText("FDR; score - add later")
                ),
                mainPanel(
-                 plotlyOutput("gene_bar")
+                 conditionalPanel(
+                   condition = "input.selectall_bar == 0",
+                   plotlyOutput("genebar_selected")
+                 ),
+                 conditionalPanel(
+                   condition = "input.selectall_bar == 1",
+                   plotlyOutput("genebar_topn")
+                 )
+                 
                )
              )
              
@@ -144,9 +158,17 @@ server <- function(input, output) {
   # show data for single comparison
   output$comp_data_table <- renderDataTable({
     
-    datatable(df_gene(),
+    # bring in GeneCards links
+    # don't replace gene id with link - there are a few differences between `MyList` and `Gene Symbol`
+    df_gene_gc <- df_gene() %>% 
+      left_join(select(CUL3_GO_GC, genecards, `Gene Symbol`), 
+                by = c("id" = "Gene Symbol")) %>% 
+      select(id, genecards, everything())
+    
+    datatable(df_gene_gc,
               options = list(search = list(regex = TRUE)),
-              caption = paste0(input$showdata, ".gene_summary"))
+              caption = paste0(input$showdata, ".gene_summary"),
+              escape = FALSE)
     
   }) 
   
@@ -207,7 +229,7 @@ server <- function(input, output) {
       geom_smooth(method = "lm", 
                   formula = "y ~ x",
                   se = FALSE) 
-
+    
     fig1 <- ggplotly(p1) %>% 
       add_annotations(text = paste0("R^2 = ", treatment_r2),
                       x = 0, y = 1, xref = "x", yref = "paper", 
@@ -226,7 +248,7 @@ server <- function(input, output) {
       geom_smooth(method = "lm", 
                   formula = "y ~ x",
                   se = FALSE) 
-
+    
     fig2 <- ggplotly(p2) %>% 
       add_annotations(text = paste0("R^2 = ", control_r2), 
                       x = 0, y = 1, xref = "x", yref = "paper", 
@@ -240,62 +262,34 @@ server <- function(input, output) {
              margin = list(t = 50))
   })
   
-  # top 20 ranked genes
-  output$gene_bar <- renderPlotly({
+  ## this needs 2 different outputs - genebar_topn, genebar_selected
+  
+  # if ranking top N from all genes
+  output$genebar_topn <- renderPlotly({
     
-    df_genebar <- if (input$selectall_bar == TRUE) {
-      df_gene() %>% 
-        select(id, `neg|score`, `neg|rank`, 
-               `pos|rank`, `pos|score`,
-               `neg|p-value`, `pos|p-value`) %>%
-        pivot_longer(cols = ends_with("rank"), names_to = "rank_type", values_to = "rank") %>% 
-        pivot_longer(cols = ends_with("score"), names_to = "score_type", values_to = "score") %>% 
-        pivot_longer(cols = ends_with("value"), names_to = "p_type", values_to = "p_value") %>% 
-        arrange(rank) %>% 
-        filter(rank <= input$topn) %>%
-        filter(case_when(rank_type == "neg|rank" ~ score_type == "neg|score",
-                         rank_type == "pos|rank" ~ score_type == "pos|score")) %>%
-        filter(case_when(rank_type == "neg|rank" ~ p_type == "neg|p-value",
-                         rank_type == "pos|rank" ~ p_type == "pos|p-value"))
-    } else {
-      df_gene() %>% 
-        filter(id %in% genes_from_table()) %>% 
-        select(id, `neg|score`, `neg|rank`, 
-               `pos|rank`, `pos|score`,
-               `neg|p-value`, `pos|p-value`) %>%
-        pivot_longer(cols = ends_with("rank"), names_to = "rank_type", values_to = "rank") %>% 
-        pivot_longer(cols = ends_with("score"), names_to = "score_type", values_to = "score") %>% 
-        pivot_longer(cols = ends_with("value"), names_to = "p_type", values_to = "p_value") %>% 
-        #arrange(rank) %>% 
-        #filter(rank <= input$topn) %>%
-        filter(case_when(rank_type == "neg|rank" ~ score_type == "neg|score",
-                         rank_type == "pos|rank" ~ score_type == "pos|score")) %>%
-        filter(case_when(rank_type == "neg|rank" ~ p_type == "neg|p-value",
-                         rank_type == "pos|rank" ~ p_type == "pos|p-value"))
-    }
-    
-    # df_top20 <- df_gene() %>% 
-    #   select(id, `neg|score`, `neg|rank`, 
-    #          `pos|rank`, `pos|score`,
-    #          `neg|p-value`, `pos|p-value`) %>%
-    #   pivot_longer(cols = ends_with("rank"), names_to = "rank_type", values_to = "rank") %>% 
-    #   pivot_longer(cols = ends_with("score"), names_to = "score_type", values_to = "score") %>% 
-    #   pivot_longer(cols = ends_with("value"), names_to = "p_type", values_to = "p_value") %>% 
-    #   arrange(rank) %>% 
-    #   filter(rank <= input$topn) %>%
-    #   filter(case_when(rank_type == "neg|rank" ~ score_type == "neg|score",
-    #                    rank_type == "pos|rank" ~ score_type == "pos|score")) %>%
-    #   filter(case_when(rank_type == "neg|rank" ~ p_type == "neg|p-value",
-    #                    rank_type == "pos|rank" ~ p_type == "pos|p-value")) 
+    df_top20 <- df_gene() %>%
+      select(id, `neg|score`, `neg|rank`,
+             `pos|rank`, `pos|score`,
+             `neg|p-value`, `pos|p-value`) %>%
+      pivot_longer(cols = ends_with("rank"), names_to = "rank_type", values_to = "rank") %>%
+      pivot_longer(cols = ends_with("score"), names_to = "score_type", values_to = "score") %>%
+      pivot_longer(cols = ends_with("value"), names_to = "p_type", values_to = "p_value") %>%
+      arrange(rank) %>%
+      filter(rank <= input$topn) %>%
+      filter(case_when(rank_type == "neg|rank" ~ score_type == "neg|score",
+                       rank_type == "pos|rank" ~ score_type == "pos|score")) %>%
+      filter(case_when(rank_type == "neg|rank" ~ p_type == "neg|p-value",
+                       rank_type == "pos|rank" ~ p_type == "pos|p-value"))
     
     
-    p3 <- df_genebar %>% 
+    p3 <- df_top20 %>%
       ggplot(aes(y = fct_reorder(id, -rank), x = -log10(score),
                  fill = case_when(input$fillby == "ntc" ~ id %in% CUL3_synNTC_list,
                                   input$fillby == "pval" ~ p_value <= 0.01),
                  rank = rank, score = score, p = p_value)) +
       geom_col() +
       facet_wrap(~rank_type, scales = "free_y") +
+      scale_y_reordered() +
       scale_fill_brewer(palette = "Dark2",
                         name = case_when(input$fillby == "ntc" ~ "gene in NTC list",
                                          input$fillby == "pval" ~ "p <= 0.01")) +
@@ -304,6 +298,47 @@ server <- function(input, output) {
       ggtitle(paste0("Top ", input$topn, " highest-ranked genes in ", input$showdata, ".gene_summary"))
     
     ggplotly(p3, tooltip = c("rank", "score", "p"))
+    
+  })  
+  
+  
+  
+  output$genebar_selected <- renderPlotly({
+    
+    df_gene_selected <-  df_gene() %>% 
+      filter(id %in% genes_from_table()) %>% 
+      select(id, `neg|score`, `neg|rank`, 
+             `pos|rank`, `pos|score`,
+             `neg|p-value`, `pos|p-value`) %>%
+      pivot_longer(cols = ends_with("rank"), names_to = "rank_type", values_to = "rank") %>% 
+      pivot_longer(cols = ends_with("score"), names_to = "score_type", values_to = "score") %>% 
+      pivot_longer(cols = ends_with("value"), names_to = "p_type", values_to = "p_value") %>% 
+      filter(case_when(rank_type == "neg|rank" ~ score_type == "neg|score",
+                       rank_type == "pos|rank" ~ score_type == "pos|score")) %>%
+      filter(case_when(rank_type == "neg|rank" ~ p_type == "neg|p-value",
+                       rank_type == "pos|rank" ~ p_type == "pos|p-value"))
+    
+    
+    # use {tidytext} to reorder within facets
+    # create new id2 variable for reordering (adds "___"); use id for fill
+    p4 <- df_gene_selected %>%
+      mutate(rank_type = as.factor(rank_type),
+             id2 = reorder_within(as.factor(id), -rank, rank_type)) %>% 
+      ggplot(aes(y = id2, x = -log10(score),
+                 fill = case_when(input$fillby == "ntc" ~ id %in% CUL3_synNTC_list,
+                                  input$fillby == "pval" ~ p_value <= 0.01),
+                 rank = rank, score = score, p = p_value)) +
+      geom_col() +
+      facet_wrap(~rank_type, scales = "free_y") +
+      scale_y_reordered() +
+      scale_fill_brewer(palette = "Dark2",
+                        name = case_when(input$fillby == "ntc" ~ "gene in NTC list",
+                                         input$fillby == "pval" ~ "p <= 0.01")) +
+      ylab(NULL) +
+      xlab("-log10 MAGeCK gene score") +
+      ggtitle(paste0("Selected genes from ", input$showdata, ".gene_summary, by pos or neg rank"))
+    
+    ggplotly(p4, tooltip = c("rank", "score", "p"))
     
   })
   
@@ -319,7 +354,7 @@ server <- function(input, output) {
   # scatter plot of individual sgRNAs for each gene
   output$scatter_sgrna <- renderPlotly({
     
-    p4 <- df_sgRNA() %>% 
+    p5 <- df_sgRNA() %>% 
       filter(Gene %in% genes_from_table()) %>% 
       ggplot(aes(x = Gene, y = score, fill = Gene)) + 
       geom_jitter(aes(group = Gene, sgRNA = sgrna),
@@ -333,7 +368,7 @@ server <- function(input, output) {
       xlab(NULL) +
       ggtitle("Individual sgRNA scores for selected genes")
     
-    ggplotly(p4, tooltip = c("sgRNA", "y"))
+    ggplotly(p5, tooltip = c("sgRNA", "y"))
     
   })
   
