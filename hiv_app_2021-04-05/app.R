@@ -107,12 +107,11 @@ ui <- fluidPage(
                    sliderInput("topn", "Number of genes to plot:",
                                min = 1, max = 50, value = 20)
                  ),
-                 helpText("Rank by - add later"),
                  radioButtons("fillby", "Fill bars by:",
                               choices = list("gene in NTC list" = "ntc",
-                                             "p <= 0.01" = "pval"),
-                              selected = "ntc"),
-                 helpText("FDR; score - add later")
+                                             "p <= 0.01" = "pval",
+                                             "fdr <= 0.05" = "fdr"),
+                              selected = "ntc")
                ),
                mainPanel(
                  conditionalPanel(
@@ -270,34 +269,40 @@ server <- function(input, output) {
     df_top20 <- df_gene() %>%
       select(id, `neg|score`, `neg|rank`,
              `pos|rank`, `pos|score`,
-             `neg|p-value`, `pos|p-value`) %>%
+             `neg|p-value`, `pos|p-value`,
+             `neg|fdr`, `pos|fdr`) %>%
       pivot_longer(cols = ends_with("rank"), names_to = "rank_type", values_to = "rank") %>%
       pivot_longer(cols = ends_with("score"), names_to = "score_type", values_to = "score") %>%
       pivot_longer(cols = ends_with("value"), names_to = "p_type", values_to = "p_value") %>%
+      pivot_longer(cols = ends_with("fdr"), names_to = "fdr_type", values_to = "fdr") %>%
       arrange(rank) %>%
       filter(rank <= input$topn) %>%
       filter(case_when(rank_type == "neg|rank" ~ score_type == "neg|score",
                        rank_type == "pos|rank" ~ score_type == "pos|score")) %>%
       filter(case_when(rank_type == "neg|rank" ~ p_type == "neg|p-value",
-                       rank_type == "pos|rank" ~ p_type == "pos|p-value"))
+                       rank_type == "pos|rank" ~ p_type == "pos|p-value")) %>% 
+      filter(case_when(rank_type == "neg|rank" ~ fdr_type == "neg|fdr",
+                       rank_type == "pos|rank" ~ fdr_type == "pos|fdr"))
     
     
     p3 <- df_top20 %>%
       ggplot(aes(y = fct_reorder(id, -rank), x = -log10(score),
                  fill = case_when(input$fillby == "ntc" ~ id %in% CUL3_synNTC_list,
-                                  input$fillby == "pval" ~ p_value <= 0.01),
-                 rank = rank, score = score, p = p_value)) +
+                                  input$fillby == "pval" ~ p_value <= 0.01,
+                                  input$fillby == "fdr" ~ fdr <= 0.05),
+                 rank = rank, score = score, p = p_value, fdr = fdr)) +
       geom_col() +
       facet_wrap(~rank_type, scales = "free_y") +
       scale_y_reordered() +
       scale_fill_brewer(palette = "Dark2",
                         name = case_when(input$fillby == "ntc" ~ "gene in NTC list",
-                                         input$fillby == "pval" ~ "p <= 0.01")) +
+                                         input$fillby == "pval" ~ "p <= 0.01",
+                                         input$fillby == "fdr" ~ "FDR <= 0.05")) +
       ylab(NULL) +
       xlab("-log10 MAGeCK gene score") +
       ggtitle(paste0("Top ", input$topn, " highest-ranked genes in ", input$showdata, ".gene_summary"))
     
-    ggplotly(p3, tooltip = c("rank", "score", "p"))
+    ggplotly(p3, tooltip = c("rank", "score", "p", "fdr"))
     
   })  
   
@@ -309,14 +314,18 @@ server <- function(input, output) {
       filter(id %in% genes_from_table()) %>% 
       select(id, `neg|score`, `neg|rank`, 
              `pos|rank`, `pos|score`,
-             `neg|p-value`, `pos|p-value`) %>%
+             `neg|p-value`, `pos|p-value`,
+             `neg|fdr`, `pos|fdr`) %>%
       pivot_longer(cols = ends_with("rank"), names_to = "rank_type", values_to = "rank") %>% 
       pivot_longer(cols = ends_with("score"), names_to = "score_type", values_to = "score") %>% 
       pivot_longer(cols = ends_with("value"), names_to = "p_type", values_to = "p_value") %>% 
+      pivot_longer(cols = ends_with("fdr"), names_to = "fdr_type", values_to = "fdr") %>%
       filter(case_when(rank_type == "neg|rank" ~ score_type == "neg|score",
                        rank_type == "pos|rank" ~ score_type == "pos|score")) %>%
       filter(case_when(rank_type == "neg|rank" ~ p_type == "neg|p-value",
-                       rank_type == "pos|rank" ~ p_type == "pos|p-value"))
+                       rank_type == "pos|rank" ~ p_type == "pos|p-value")) %>% 
+      filter(case_when(rank_type == "neg|rank" ~ fdr_type == "neg|fdr",
+                       rank_type == "pos|rank" ~ fdr_type == "pos|fdr"))
     
     
     # use {tidytext} to reorder within facets
@@ -326,19 +335,21 @@ server <- function(input, output) {
              id2 = reorder_within(as.factor(id), -rank, rank_type)) %>% 
       ggplot(aes(y = id2, x = -log10(score),
                  fill = case_when(input$fillby == "ntc" ~ id %in% CUL3_synNTC_list,
-                                  input$fillby == "pval" ~ p_value <= 0.01),
-                 rank = rank, score = score, p = p_value)) +
+                                  input$fillby == "pval" ~ p_value <= 0.01,
+                                  input$fillby == "fdr" ~ fdr <= 0.05),
+                 rank = rank, score = score, p = p_value, fdr = fdr)) +
       geom_col() +
       facet_wrap(~rank_type, scales = "free_y") +
       scale_y_reordered() +
       scale_fill_brewer(palette = "Dark2",
                         name = case_when(input$fillby == "ntc" ~ "gene in NTC list",
-                                         input$fillby == "pval" ~ "p <= 0.01")) +
+                                         input$fillby == "pval" ~ "p <= 0.01",
+                                         input$fillby == "fdr" ~ "FDR <= 0.05")) +
       ylab(NULL) +
       xlab("-log10 MAGeCK gene score") +
       ggtitle(paste0("Selected genes from ", input$showdata, ".gene_summary, by pos or neg rank"))
     
-    ggplotly(p4, tooltip = c("rank", "score", "p"))
+    ggplotly(p4, tooltip = c("rank", "score", "p", "fdr"))
     
   })
   
