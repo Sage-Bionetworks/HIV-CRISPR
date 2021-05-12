@@ -33,7 +33,11 @@ ui <- fluidPage(
                               choices = list("median_norm.gene_summary" = "median_norm",
                                              "control_norm.gene_summary" = "control_norm"),
                               selected = "median_norm"),
-                 helpText("Drag columns to reorder, or click 'Column visibility' to show/hide columns. Click to select multiple rows for plotting. Selected genes will be listed below. Search box accepts regular expressions (ie. use '|' for OR)"),
+                 helpText("Drag columns to reorder, 
+                          or click 'Column visibility' to show/hide columns. 
+                          Click to select multiple rows for plotting. 
+                          Selected genes will be listed below. 
+                          Search box accepts regular expressions (ie. use '|' for OR)"),
                  actionButton("clear", "Clear selections"),
                  br(),
                  br(),
@@ -73,16 +77,22 @@ ui <- fluidPage(
     tabPanel("Individual sgRNAs",
              sidebarLayout(
                sidebarPanel(
-                 helpText("Use the Data tab to select genes to plot. Vertical lines indicate median of group."),
+                 helpText("Use the Data tab to select genes to plot. 
+                          Vertical lines indicate median of group. 
+                          (Error message means you haven't selected anything from the Data tab.)"),
                  br(),
                  wellPanel(
                    p("Selected genes: ", 
                      textOutput("selection_info3", inline = TRUE))
-                 )
+                 ),
+                 radioButtons("sgrna_y", "Select variable to plot from sgRNA_summary output file:",
+                              choices = list("Log2 fold change" = "LFC",
+                                             "Score" = "score"),
+                              selected = "LFC")
+                 
                ),
                mainPanel(
-                 plotlyOutput("scatter_sgrna"),
-                 plotlyOutput("log2fc")
+                 plotlyOutput("scatter_sgrna")
                )
              )
              
@@ -184,7 +194,7 @@ server <- function(input, output) {
                              colReorder = list(realtime = FALSE)),
               caption = paste0(input$showdata, ".gene_summary"),
               escape = FALSE
-              )
+    )
     
   }) 
   
@@ -381,13 +391,13 @@ server <- function(input, output) {
     
     p5 <- df_sgRNA() %>% 
       filter(Gene %in% genes_from_table()) %>% 
-      ggplot(aes(x = Gene, y = score)) +
-      geom_boxplot(outlier.shape = NA) +
+      ggplot(aes_string(x = "Gene", y = input$sgrna_y)) +
+      # geom_boxplot(outlier.shape = NA) +
       geom_jitter(aes(group = Gene, sgRNA = sgrna, fill = Gene),
                   width = 0.1, alpha = 0.6, shape = 21) +
-      # stat_summary(aes(group = Gene),
-      #              fun = median, geom = "crossbar", 
-      #              width = 0.5) +
+      stat_summary(aes(group = Gene),
+                   fun = median, geom = "crossbar",
+                   width = 0.5) +
       # coord_flip() +
       scale_fill_viridis_d() +
       theme(legend.position = "none") +
@@ -398,22 +408,22 @@ server <- function(input, output) {
     
   })
   
-  output$log2fc <- renderPlotly({
-    
-    p6 <- df_sgRNA() %>% 
-      filter(Gene %in% genes_from_table()) %>% 
-      ggplot(aes(x = Gene, y = LFC, group = Gene, sgrna = sgrna)) +
-      geom_boxplot(outlier.shape = NA) +
-      geom_jitter(aes(fill = Gene, group = Gene),
-                  width = 0.1, alpha = 0.6, shape = 21) +
-      scale_fill_viridis_d() +
-      theme(legend.position = "none") +
-      xlab(NULL) +
-      ggtitle("Individual sgRNAs for selected genes")
-    
-    ggplotly(p6, tooltip = c("sgrna", "y"))
-    
-  })
+  # output$log2fc <- renderPlotly({
+  #   
+  #   p6 <- df_sgRNA() %>% 
+  #     filter(Gene %in% genes_from_table()) %>% 
+  #     ggplot(aes(x = Gene, y = LFC, group = Gene, sgrna = sgrna)) +
+  #     geom_boxplot(outlier.shape = NA) +
+  #     geom_jitter(aes(fill = Gene, group = Gene),
+  #                 width = 0.1, alpha = 0.6, shape = 21) +
+  #     scale_fill_viridis_d() +
+  #     theme(legend.position = "none") +
+  #     xlab(NULL) +
+  #     ggtitle("Individual sgRNAs for selected genes")
+  #   
+  #   ggplotly(p6, tooltip = c("sgrna", "y"))
+  #   
+  # })
   
   output$dotplot <- renderPlotly({
     
