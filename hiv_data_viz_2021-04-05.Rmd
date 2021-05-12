@@ -78,8 +78,14 @@ syn23748097 <- synGet("syn23748097")
 #metadata for all data files
 syn21763191 <- synGet("syn21763191")
 
+#CUL3 library sequences
+syn23594724 <- synGet("syn23594724")
+
 #CUL3 NTC list
 syn23594725 <- synGet("syn23594725")
+
+#CUL3 metascape annotation
+syn25617715 <- synGet("syn25617715")
 
 #median_norm sgRNA summary
 syn23748103 <- synGet("syn23748103")
@@ -108,6 +114,7 @@ control_norm <- read_tsv(syn23748097$path)
 metadata_query <- synTableQuery(sprintf("SELECT * FROM syn21763191", syn21763191$properties$id)) 
 metadata <- read_csv(metadata_query$filepath)
 
+CUL3_library <- read_csv(syn23594724$path)
 CUL3_NTC_raw <- read_lines(syn23594725$path)
 CUL3_synNTC_list <- str_replace(CUL3_NTC_raw, "^.+syn", "syn")
 
@@ -122,7 +129,7 @@ ref: http://www.sthda.com/english/wiki/saving-data-into-r-data-format-rds-and-rd
 
 ```{r}
 save(treatment_joined, control_joined, median_norm, control_norm,
-     metadata, CUL3_synNTC_list, median_norm_sgRNA, control_norm_sgRNA, file = "test_comp_data.RData")
+     metadata, CUL3_library, CUL3_synNTC_list, CUL3_GO_GC, median_norm_sgRNA, control_norm_sgRNA, file = "test_comp_data.RData")
 
 ## copy this file into the app directory
 ```
@@ -265,6 +272,7 @@ median_norm_top20 <- median_norm %>%
                    rank_type == "pos|rank" ~ score_type == "pos|score")) %>%
   filter(case_when(rank_type == "neg|rank" ~ p_type == "neg|p-value",
                    rank_type == "pos|rank" ~ p_type == "pos|p-value"))
+
 ```
 
 Colour by NTC:
@@ -325,6 +333,28 @@ p4 <- median_norm_top20 %>%
 ggplotly(p4, tooltip = c("rank", "score", "p"))
 ```
 
+
+Colour by p-value, use linked subplots instead `reorder_within` and `scale_y_ordered` from {tidytext} (does not work with the conditional fill)
+
+
+```{r}
+p4 <- median_norm_top20 %>% 
+  ggplot(aes(y = fct_reorder(id, -rank), x = -log10(score),
+             fill = p_value <= 0.01,
+             rank = rank, score = score, p = p_value)) +
+  geom_col() +
+  facet_wrap(~rank_type, scales = "free_y") +
+  scale_fill_brewer(palette = "Dark2",
+                    name = "p <= 0.01") +
+  ylab(NULL) +
+  xlab("-log10 MAGeCK gene score") +
+  ggtitle("Top 20 highest-ranked genes")
+
+ggplotly(p4, tooltip = c("rank", "score", "p"))
+```
+
+
+
 >Set different false discovery rate (FDR) or p value or Gene Score cut-offs to determine significance of gene hits (show a dotted line on graph) 
 
 Other Features:
@@ -383,6 +413,42 @@ p <- median_norm_sgRNA %>%
 ggplotly(p, tooltip = c("sgRNA", "y"))
 ```
 
+
+Link this to datatable
+
+```{r}
+CUL3_renamed <- CUL3_library %>% 
+  rename(sequence = sgrna,
+         sgrna = guide)
+
+median_norm_sgRNA_seq <- median_norm_sgRNA %>%
+  left_join(select(CUL3_renamed, -gene), by = "sgrna") %>% 
+  select(sgrna, Gene, sequence, everything()) %>% 
+  filter(str_detect(Gene, "NFK"))
+
+median_norm_sgRNA_shared <- SharedData$new(median_norm_sgRNA_seq,
+                                           key = ~sgrna)
+
+p <- ggplot(data = median_norm_sgRNA_shared,
+         aes(x = Gene, y = score, color = Gene)) + 
+  geom_jitter(aes(group = Gene, sgRNA = sgrna),
+              width = 0.1, alpha = 0.6) +
+  stat_summary(aes(group = Gene),
+               fun = median, geom = "crossbar", 
+               width = 0.4, color = "darkgrey") +
+  #scale_color_manual(values = pnw_palette("Bay", type = "discrete")) +
+  theme(legend.position = "none") +
+  ggtitle("Individual sgRNA scores for selected genes")
+
+ggp <- ggplotly(p, tooltip = c("sgrna", "y")) %>% 
+  highlight(on = "plotly_click",
+            persistent = TRUE)
+
+dt <- datatable(median_norm_sgRNA_shared)
+
+bscols(ggp, dt)
+```
+
 >Set different false discovery rate (FDR) or p value or Gene Score cut-offs to determine significance of gene hits (show a dotted line on graph) 
 Export figures into pdf/tiff/png
 
@@ -411,19 +477,19 @@ median_norm_long_ntc <- median_norm_long %>%
 shared_median_norm_long <- SharedData$new(median_norm_long, key = ~ id)
 shared_median_norm_long_ntc <- SharedData$new(median_norm_long_ntc, key = ~ id)
 
-median_norm_long_ntc %>% 
-  filter(score_type == "neg|score") %>% 
-  pull(score) %>% 
-  median() %>% 
-  log10()
-# 0.327; log = 0.485
-
-median_norm_long_ntc %>% 
-  filter(score_type == "pos|score") %>% 
-  pull(score) %>% 
-  median() %>% 
-  log10()
-# 0.47; log = .328
+# median_norm_long_ntc %>% 
+#   filter(score_type == "neg|score") %>% 
+#   pull(score) %>% 
+#   median() %>% 
+#   log10()
+# # 0.327; log = 0.485
+# 
+# median_norm_long_ntc %>% 
+#   filter(score_type == "pos|score") %>% 
+#   pull(score) %>% 
+#   median() %>% 
+#   log10()
+# # 0.47; log = 0.328
 
 
 # p <-
@@ -447,6 +513,88 @@ shared_median_norm_long %>%
 
 ggplotly(p, tooltip = c("id", "text"))
 ```
+
+Now without crosstalk, and on the same plot.
+
+Fold change neg|score from median(neg|score) of NTCs
+Fold change pos|score from median(pos|score) of NTCs
+
+negative scores on top
+
+
+```{r}
+
+median_neg_ntc <- median_norm %>% 
+  filter(str_detect(id, "NTC")) %>% 
+  pull(`neg|score`) %>% 
+  median()
+
+median_pos_ntc <- median_norm %>% 
+  filter(str_detect(id, "NTC")) %>% 
+  pull(`pos|score`) %>% 
+  median()
+
+p <- median_norm %>% 
+  select(id, `neg|score`, `pos|score`) %>%
+  mutate(neg_log_fold_change = log10(median_neg_ntc / `neg|score`),
+         pos_log_fold_change = log10(median_pos_ntc / `pos|score`)) %>%
+  # reverse the sign of pos column so it will be on the bottom of the plot
+  mutate(pos_log_fold_change = -(pos_log_fold_change)) %>% 
+  pivot_longer(cols = contains("log"),
+               names_to = "change_type",
+               values_to = "change_value") %>% 
+  ggplot(aes(x = fct_shuffle(as.factor(id)), y = change_value, fill = change_type)) +
+  geom_point(shape = 21, alpha = 0.8, size = 2) +
+  geom_point(data = . %>% filter(str_detect(id, "NTC")),
+             shape = 21, fill = "white", size = 2, 
+             show.legend = FALSE) +
+  scale_fill_brewer(palette = "Dark2") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  xlab(NULL) +
+  ylab("Log10 fold change from NTC median")
+
+ggplotly(p, tooltip = c("x", "y"))
+
+```
+
+Link the above dot plot to Datatable
+
+```{r}
+plotdata <- median_norm %>% 
+  select(id, `neg|score`, `pos|score`) %>%
+  mutate(neg_log_fold_change = log10(median_neg_ntc / `neg|score`),
+         pos_log_fold_change = log10(median_pos_ntc / `pos|score`)) %>%
+  # reverse the sign of pos column so it will be on the bottom of the plot
+  mutate(pos_log_fold_change = -(pos_log_fold_change)) %>% 
+  pivot_longer(cols = contains("log"),
+               names_to = "change_type",
+               values_to = "change_value")
+
+plotdata_shared <- SharedData$new(plotdata, key = ~id)
+
+
+p <-  ggplot(plotdata_shared, aes(x = fct_shuffle(as.factor(id)), y = change_value, fill = change_type)) +
+  geom_point(shape = 21, alpha = 0.8, size = 2) +
+  geom_point(data = . %>% filter(str_detect(id, "NTC")),
+             shape = 21, fill = "white", size = 2, 
+             show.legend = FALSE) +
+  scale_fill_brewer(palette = "Dark2") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  xlab(NULL) +
+  ylab("Log10 fold change from NTC median") 
+
+ggp <- ggplotly(p, tooltip = c("x", "y")) %>% 
+  highlight(on = "plotly_selected",
+            off = "plotly_relayout")
+
+dt <- datatable(plotdata_shared)
+
+bscols(ggp, dt)
+
+```
+
 
 Other Features: same as “Other Features” above
 
