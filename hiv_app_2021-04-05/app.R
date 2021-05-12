@@ -33,7 +33,7 @@ ui <- fluidPage(
                               choices = list("median_norm.gene_summary" = "median_norm",
                                              "control_norm.gene_summary" = "control_norm"),
                               selected = "median_norm"),
-                 helpText("Click to select multiple rows for plotting. Selected genes will be listed below. Search box accepts regular expressions (ie. use '|' for OR)"),
+                 helpText("Drag columns to reorder, or click 'Column visibility' to show/hide columns. Click to select multiple rows for plotting. Selected genes will be listed below. Search box accepts regular expressions (ie. use '|' for OR)"),
                  actionButton("clear", "Clear selections"),
                  br(),
                  br(),
@@ -81,7 +81,8 @@ ui <- fluidPage(
                  )
                ),
                mainPanel(
-                 plotlyOutput("scatter_sgrna")
+                 plotlyOutput("scatter_sgrna"),
+                 plotlyOutput("log2fc")
                )
              )
              
@@ -126,8 +127,17 @@ ui <- fluidPage(
                )
              )
              
+    ),
+    tabPanel("Dot Plot",
+             sidebarLayout(
+               sidebarPanel(
+               ),
+               mainPanel(
+                 plotlyOutput("dotplot")
+               )
+             )
+             
     )
-    
   )
   
 )
@@ -142,7 +152,8 @@ server <- function(input, output) {
       pivot_longer(cols = everything(),
                    names_to = "field", values_to = "value",
                    values_transform = list(value = as.character)) %>% 
-      datatable(caption = "Metadata for this comparison, pulled from treatment replicate 1")
+      datatable(caption = "Metadata for this comparison, pulled from treatment replicate 1",
+                rownames = FALSE)
   })
   
   # choose dataset for Data tab
@@ -165,9 +176,15 @@ server <- function(input, output) {
       select(id, genecards, everything())
     
     datatable(df_gene_gc,
-              options = list(search = list(regex = TRUE)),
+              rownames = FALSE,
+              extensions = c("Buttons", "ColReorder"),
+              options = list(search = list(regex = TRUE),
+                             dom = "Bfrtip",
+                             buttons = I("colvis"),
+                             colReorder = list(realtime = FALSE)),
               caption = paste0(input$showdata, ".gene_summary"),
-              escape = FALSE)
+              escape = FALSE
+              )
     
   }) 
   
@@ -261,7 +278,7 @@ server <- function(input, output) {
              margin = list(t = 50))
   })
   
-  ## this needs 2 different outputs - genebar_topn, genebar_selected
+  ## Two different plots for ranked gene summary: genebar_topn, genebar_selected
   
   # if ranking top N from all genes
   output$genebar_topn <- renderPlotly({
@@ -284,7 +301,6 @@ server <- function(input, output) {
       filter(case_when(rank_type == "neg|rank" ~ fdr_type == "neg|fdr",
                        rank_type == "pos|rank" ~ fdr_type == "pos|fdr"))
     
-    
     p3 <- df_top20 %>%
       ggplot(aes(y = fct_reorder(id, -rank), x = -log10(score),
                  fill = case_when(input$fillby == "ntc" ~ id %in% CUL3_synNTC_list,
@@ -305,8 +321,6 @@ server <- function(input, output) {
     ggplotly(p3, tooltip = c("rank", "score", "p", "fdr"))
     
   })  
-  
-  
   
   output$genebar_selected <- renderPlotly({
     
@@ -367,19 +381,75 @@ server <- function(input, output) {
     
     p5 <- df_sgRNA() %>% 
       filter(Gene %in% genes_from_table()) %>% 
-      ggplot(aes(x = Gene, y = score, fill = Gene)) + 
-      geom_jitter(aes(group = Gene, sgRNA = sgrna),
+      ggplot(aes(x = Gene, y = score)) +
+      geom_boxplot(outlier.shape = NA) +
+      geom_jitter(aes(group = Gene, sgRNA = sgrna, fill = Gene),
                   width = 0.1, alpha = 0.6, shape = 21) +
-      stat_summary(aes(group = Gene),
-                   fun = median, geom = "crossbar", 
-                   width = 0.5) +
-      coord_flip() +
+      # stat_summary(aes(group = Gene),
+      #              fun = median, geom = "crossbar", 
+      #              width = 0.5) +
+      # coord_flip() +
       scale_fill_viridis_d() +
       theme(legend.position = "none") +
       xlab(NULL) +
       ggtitle("Individual sgRNA scores for selected genes")
     
     ggplotly(p5, tooltip = c("sgRNA", "y"))
+    
+  })
+  
+  output$log2fc <- renderPlotly({
+    
+    p6 <- df_sgRNA() %>% 
+      filter(Gene %in% genes_from_table()) %>% 
+      ggplot(aes(x = Gene, y = LFC, group = Gene, sgrna = sgrna)) +
+      geom_boxplot(outlier.shape = NA) +
+      geom_jitter(aes(fill = Gene, group = Gene),
+                  width = 0.1, alpha = 0.6, shape = 21) +
+      scale_fill_viridis_d() +
+      theme(legend.position = "none") +
+      xlab(NULL) +
+      ggtitle("Individual sgRNAs for selected genes")
+    
+    ggplotly(p6, tooltip = c("sgrna", "y"))
+    
+  })
+  
+  output$dotplot <- renderPlotly({
+    
+    median_neg_ntc <- df_gene() %>% 
+      filter(str_detect(id, "NTC")) %>% 
+      pull(`neg|score`) %>% 
+      median()
+    
+    median_pos_ntc <- df_gene() %>% 
+      filter(str_detect(id, "NTC")) %>% 
+      pull(`pos|score`) %>% 
+      median()
+    
+    p7 <- df_gene() %>% 
+      select(id, `neg|score`, `pos|score`) %>%
+      mutate(neg_log_fold_change = log10(median_neg_ntc / `neg|score`),
+             pos_log_fold_change = log10(median_pos_ntc / `pos|score`)) %>%
+      # reverse the sign of pos column so it will be on the bottom of the plot
+      mutate(pos_log_fold_change = -(pos_log_fold_change)) %>% 
+      pivot_longer(cols = contains("log"),
+                   names_to = "change_type",
+                   values_to = "change_value") %>% 
+      ggplot(aes(x = fct_shuffle(as.factor(id)),
+                 y = change_value, 
+                 fill = change_type, text = id)) +
+      geom_point(shape = 21, alpha = 0.8, size = 2) +
+      geom_point(data = . %>% filter(str_detect(id, "NTC")),
+                 shape = 21, fill = "white", size = 2, 
+                 show.legend = FALSE) +
+      scale_fill_brewer(palette = "Dark2") +
+      theme(axis.text.x = element_blank(),
+            axis.ticks.x = element_blank()) +
+      xlab("Genes") +
+      ylab("Log10 fold change from NTC median")
+    
+    ggplotly(p7, tooltip = "text")
     
   })
   
