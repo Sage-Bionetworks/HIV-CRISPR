@@ -6,8 +6,14 @@ library(DT)
 library(plotly)
 library(crosstalk)
 
-# Load cached data from Synapse
-load("test_comp_data.RData")
+# Load data from Synapse
+source("get_synapse_data.R")
+
+## FIX THIS LATER - get sample sheet id from input
+sample_sheet_id <- "syn25435417"
+
+get_info_counts_outputs(sample_sheet_id) %>% 
+  list2env(., .GlobalEnv)
 
 ui <- fluidPage(
   
@@ -157,7 +163,7 @@ server <- function(input, output) {
   # comparison metadata (from treatment replicate 1)
   output$metadata <- renderDataTable({
     metadata %>% 
-      filter(id == "syn23702679") %>%
+      filter(id == treatment1_id) %>%
       select(-starts_with("ROW_")) %>% 
       pivot_longer(cols = everything(),
                    names_to = "field", values_to = "value",
@@ -169,9 +175,9 @@ server <- function(input, output) {
   # choose dataset for Data tab
   df_gene <- reactive({
     if (input$showdata == "median_norm"){
-      df_gene <- median_norm
+      df_gene <- median_norm.gene_summary.txt
     } else {
-      df_gene <- control_norm
+      df_gene <- control_norm.gene_summary.txt
     }
   })
   
@@ -214,7 +220,7 @@ server <- function(input, output) {
   })
   
   # print list of selected genes
-  # do it multiple times bc can't reuse same output
+  # do it multiple times bc you can't reuse same output
   output$selection_info1 <- 
     output$selection_info2 <- 
     output$selection_info3 <-
@@ -243,18 +249,20 @@ server <- function(input, output) {
     }
     
     # calculate R2 and plot treatment replicates
-    treatment_r2 <- round(cor.test(treatment_joined$Dragonite_20201201_1.fastq,
-                                   treatment_joined$Dragonite_20201201_2.fastq,
+    treatment_r2 <- round(cor.test(treatment_joined[[2]],
+                                   treatment_joined[[3]],
                                    method = "pearson")$estimate ^ 2, 2)
     
     p1 <- treatment_joined %>%
-      ggplot(aes(x = Dragonite_20201201_1.fastq, 
-                 y = Dragonite_20201201_2.fastq,
+      ggplot(aes(x = treatment_joined[[2]], 
+                 y = treatment_joined[[3]],
                  dummy = sgRNA, group = 1)) +
       geom_point() +
       geom_smooth(method = "lm", 
                   formula = "y ~ x",
-                  se = FALSE) 
+                  se = FALSE) +
+      xlab(colnames(treatment_joined[2])) +
+      ylab(colnames(treatment_joined[3]))
     
     fig1 <- ggplotly(p1) %>% 
       add_annotations(text = paste0("R^2 = ", treatment_r2),
