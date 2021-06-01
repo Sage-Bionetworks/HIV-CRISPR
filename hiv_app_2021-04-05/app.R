@@ -408,23 +408,7 @@ server <- function(input, output) {
     
   })
   
-  # output$log2fc <- renderPlotly({
-  #   
-  #   p6 <- df_sgRNA() %>% 
-  #     filter(Gene %in% genes_from_table()) %>% 
-  #     ggplot(aes(x = Gene, y = LFC, group = Gene, sgrna = sgrna)) +
-  #     geom_boxplot(outlier.shape = NA) +
-  #     geom_jitter(aes(fill = Gene, group = Gene),
-  #                 width = 0.1, alpha = 0.6, shape = 21) +
-  #     scale_fill_viridis_d() +
-  #     theme(legend.position = "none") +
-  #     xlab(NULL) +
-  #     ggtitle("Individual sgRNAs for selected genes")
-  #   
-  #   ggplotly(p6, tooltip = c("sgrna", "y"))
-  #   
-  # })
-  
+
   output$dotplot <- renderPlotly({
     
     median_neg_ntc <- df_gene() %>% 
