@@ -4,28 +4,30 @@ library(tidyverse)
 library(tidytext)
 library(DT)
 library(plotly)
-library(crosstalk)
+library(yaml)
 
-# Load data from Synapse
+# Load common data (used for any comparison) from Synapse
 source("get_synapse_data.R")
 
-## FIX THIS LATER - get sample sheet id from input
-sample_sheet_id <- "syn25435417"
-
-get_info_counts_outputs(sample_sheet_id) %>% 
-  list2env(., .GlobalEnv)
+# Filter output view for comparisons where output is currently linked with configId
+comparison_choices <- output_view %>% 
+  filter(!is.na(configId)) %>% 
+  pull(name)
 
 ui <- fluidPage(
   
-  titlePanel("HIV-CRISPR data viz demo: 20201230_Dragonite_Lat_CUL3_5A8v1WT"),
+  titlePanel("HIV-CRISPR data viz demo (CUL3 library only)"),
   
   tabsetPanel(
     tabPanel("Metadata",
              sidebarLayout(
                sidebarPanel(
-                 "input TBD"
+                 selectInput("sample_sheet_id", "Select comparison:",
+                             choices = comparison_choices)
                ),
                mainPanel(
+                 #h4(paste0("Comparison name: ", comparison_name)),
+                 br(),
                  br(),
                  dataTableOutput("metadata")
                )
@@ -147,6 +149,7 @@ ui <- fluidPage(
     tabPanel("Dot Plot",
              sidebarLayout(
                sidebarPanel(
+                 helpText("This plot only works with median_norm.gene_summary.txt")
                ),
                mainPanel(
                  plotlyOutput("dotplot")
@@ -160,8 +163,20 @@ ui <- fluidPage(
 
 server <- function(input, output) {
   
+  # get synID for chosen comparison name
+  sample_sheet_id <- reactive({
+    output_view %>% 
+      filter(name == input$sample_sheet_id) %>% 
+      pull(configId)
+  })
+  
   # comparison metadata (from treatment replicate 1)
   output$metadata <- renderDataTable({
+    
+    # get data for specified comparison
+    get_info_counts_outputs(sample_sheet_id()) %>%
+      list2env(., .GlobalEnv)
+    
     metadata %>% 
       filter(id == treatment1_id) %>%
       select(-starts_with("ROW_")) %>% 
