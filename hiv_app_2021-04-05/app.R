@@ -270,18 +270,20 @@ server <- function(input, output) {
                       xanchor = "left", showarrow = FALSE)
     
     # calculate R2 and plot control replicates
-    control_r2 <- round(cor.test(control_joined$Dragonite_20201201_17.fastq,
-                                 control_joined$Dragonite_20201201_18.fastq,
+    control_r2 <- round(cor.test(control_joined[[2]],
+                                 control_joined[[3]],
                                  method = "pearson")$estimate ^ 2, 2)
     
     p2 <- control_joined %>% 
-      ggplot(aes(x = Dragonite_20201201_17.fastq, 
-                 y = Dragonite_20201201_18.fastq,
+      ggplot(aes(x = control_joined[[2]], 
+                 y = control_joined[[3]],
                  dummy = sgRNA, group = 1)) +
       geom_point() +
       geom_smooth(method = "lm", 
                   formula = "y ~ x",
-                  se = FALSE) 
+                  se = FALSE) +
+      xlab(colnames(control_joined[2])) +
+      ylab(colnames(control_joined[3]))
     
     fig2 <- ggplotly(p2) %>% 
       add_annotations(text = paste0("R^2 = ", control_r2), 
@@ -295,6 +297,39 @@ server <- function(input, output) {
       layout(title = "Counts in treatment (left) and control (right) replicates",
              margin = list(t = 50))
   })
+  
+  
+  # choose dataset for sgRNA tab
+  df_sgRNA <- reactive({
+    if (input$showdata == "median_norm"){
+      df_sgRNA <- median_norm.sgrna_summary.txt
+    } else {
+      df_sgRNA <- control_norm.sgrna_summary.txt
+    }
+  })
+  
+  # scatter plot of individual sgRNAs for each gene
+  output$scatter_sgrna <- renderPlotly({
+    
+    p5 <- df_sgRNA() %>% 
+      filter(Gene %in% genes_from_table()) %>% 
+      ggplot(aes_string(x = "Gene", y = input$sgrna_y)) +
+      # geom_boxplot(outlier.shape = NA) +
+      geom_jitter(aes(group = Gene, sgRNA = sgrna, fill = Gene),
+                  width = 0.1, alpha = 0.6, shape = 21) +
+      stat_summary(aes(group = Gene),
+                   fun = median, geom = "crossbar",
+                   width = 0.5) +
+      # coord_flip() +
+      scale_fill_viridis_d() +
+      theme(legend.position = "none") +
+      xlab(NULL) +
+      ggtitle("Individual sgRNA scores for selected genes")
+    
+    ggplotly(p5, tooltip = c("sgRNA", "y"))
+    
+  })
+  
   
   ## Two different plots for ranked gene summary: genebar_topn, genebar_selected
   
@@ -321,7 +356,7 @@ server <- function(input, output) {
     
     p3 <- df_top20 %>%
       ggplot(aes(y = fct_reorder(id, -rank), x = -log10(score),
-                 fill = case_when(input$fillby == "ntc" ~ id %in% CUL3_synNTC_list,
+                 fill = case_when(input$fillby == "ntc" ~ id %in% str_replace(cul3_synntc_list.txt, "^.+syn", "syn"),
                                   input$fillby == "pval" ~ p_value <= 0.01,
                                   input$fillby == "fdr" ~ fdr <= 0.05),
                  rank = rank, score = score, p = p_value, fdr = fdr)) +
@@ -366,7 +401,7 @@ server <- function(input, output) {
       mutate(rank_type = as.factor(rank_type),
              id2 = reorder_within(as.factor(id), -rank, rank_type)) %>% 
       ggplot(aes(y = id2, x = -log10(score),
-                 fill = case_when(input$fillby == "ntc" ~ id %in% CUL3_synNTC_list,
+                 fill = case_when(input$fillby == "ntc" ~ id %in% str_replace(cul3_synntc_list.txt, "^.+syn", "syn"),
                                   input$fillby == "pval" ~ p_value <= 0.01,
                                   input$fillby == "fdr" ~ fdr <= 0.05),
                  rank = rank, score = score, p = p_value, fdr = fdr)) +
@@ -385,38 +420,7 @@ server <- function(input, output) {
     
   })
   
-  # choose dataset for sgRNA tab
-  df_sgRNA <- reactive({
-    if (input$showdata == "median_norm"){
-      df_sgRNA <- median_norm_sgRNA
-    } else {
-      df_sgRNA <- control_norm_sgRNA
-    }
-  })
   
-  # scatter plot of individual sgRNAs for each gene
-  output$scatter_sgrna <- renderPlotly({
-    
-    p5 <- df_sgRNA() %>% 
-      filter(Gene %in% genes_from_table()) %>% 
-      ggplot(aes_string(x = "Gene", y = input$sgrna_y)) +
-      # geom_boxplot(outlier.shape = NA) +
-      geom_jitter(aes(group = Gene, sgRNA = sgrna, fill = Gene),
-                  width = 0.1, alpha = 0.6, shape = 21) +
-      stat_summary(aes(group = Gene),
-                   fun = median, geom = "crossbar",
-                   width = 0.5) +
-      # coord_flip() +
-      scale_fill_viridis_d() +
-      theme(legend.position = "none") +
-      xlab(NULL) +
-      ggtitle("Individual sgRNA scores for selected genes")
-    
-    ggplotly(p5, tooltip = c("sgRNA", "y"))
-    
-  })
-  
-
   output$dotplot <- renderPlotly({
     
     median_neg_ntc <- df_gene() %>% 
