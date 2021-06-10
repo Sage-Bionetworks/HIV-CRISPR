@@ -4,13 +4,12 @@ library(tidyverse)
 library(tidytext)
 library(DT)
 library(plotly)
-library(yaml)
 
-# Load common data (used for any comparison) from Synapse
+# Load common data (used for any screen) from Synapse
 source("get_synapse_data.R")
 
-# Filter output view for comparisons where output is currently linked with configId
-comparison_choices <- output_view %>% 
+# Filter output view for screens where output is currently linked with configId
+screen_choices <- output_view %>% 
   filter(!is.na(configId)) %>% 
   pull(name)
 
@@ -22,11 +21,11 @@ ui <- fluidPage(
     tabPanel("Metadata",
              sidebarLayout(
                sidebarPanel(
-                 selectInput("sample_sheet_id", "Select comparison:",
-                             choices = comparison_choices)
+                 selectInput("sample_sheet_id", "Select screen:",
+                             choices = screen_choices)
                ),
                mainPanel(
-                 #h4(paste0("Comparison name: ", comparison_name)),
+                 #h4(paste0("Screen name: ", screen_name)),
                  br(),
                  br(),
                  dataTableOutput("metadata")
@@ -163,17 +162,17 @@ ui <- fluidPage(
 
 server <- function(input, output) {
   
-  # get synID for chosen comparison name
+  # get synID for chosen screen name
   sample_sheet_id <- reactive({
     output_view %>% 
       filter(name == input$sample_sheet_id) %>% 
       pull(configId)
   })
   
-  # comparison metadata (from treatment replicate 1)
+  # screen metadata (from treatment replicate 1)
   output$metadata <- renderDataTable({
     
-    # get data for specified comparison
+    # get data for specified screen
     get_info_counts_outputs(sample_sheet_id()) %>%
       list2env(., .GlobalEnv)
     
@@ -183,7 +182,7 @@ server <- function(input, output) {
       pivot_longer(cols = everything(),
                    names_to = "field", values_to = "value",
                    values_transform = list(value = as.character)) %>% 
-      datatable(caption = "Metadata for this comparison, pulled from treatment replicate 1",
+      datatable(caption = "Metadata for this screen, pulled from treatment replicate 1",
                 rownames = FALSE)
   })
   
@@ -196,7 +195,7 @@ server <- function(input, output) {
     }
   })
   
-  # show data for single comparison
+  # show data for single screen
   output$comp_data_table <- renderDataTable({
     
     # bring in GeneCards links
