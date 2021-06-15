@@ -336,7 +336,8 @@ server <- function(input, output) {
                    width = 0.5) +
       # coord_flip() +
       scale_fill_viridis_d() +
-      theme(legend.position = "none") +
+      theme(legend.position = "none",
+            axis.text.x = element_text(angle = 45, hjust = 1)) +
       xlab(NULL) +
       ggtitle("Individual sgRNA scores for selected genes")
     
@@ -349,6 +350,8 @@ server <- function(input, output) {
   
   # if ranking top N from all genes
   output$genebar_topn <- renderPlotly({
+    
+    ntc_list <- get(paste0(library_name, "_SynNTC_List.txt"))
     
     df_top20 <- df_gene() %>%
       select(id, `neg|score`, `neg|rank`,
@@ -369,8 +372,9 @@ server <- function(input, output) {
                        rank_type == "pos|rank" ~ fdr_type == "pos|fdr"))
     
     p3 <- df_top20 %>%
+      mutate(is_ntc = id %in% str_replace(ntc_list, "^.*syn", "syn")) %>% 
       ggplot(aes(y = fct_reorder(id, -rank), x = -log10(score),
-                 fill = case_when(input$fillby == "ntc" ~ id %in% str_replace(cul3_synntc_list.txt, "^.+syn", "syn"),
+                 fill = case_when(input$fillby == "ntc" ~ is_ntc,
                                   input$fillby == "pval" ~ p_value <= 0.01,
                                   input$fillby == "fdr" ~ fdr <= 0.05),
                  rank = rank, score = score, p = p_value, fdr = fdr)) +
@@ -390,6 +394,8 @@ server <- function(input, output) {
   })  
   
   output$genebar_selected <- renderPlotly({
+    
+    ntc_list <- get(paste0(library_name, "_SynNTC_List.txt"))
     
     df_gene_selected <-  df_gene() %>% 
       filter(id %in% genes_from_table()) %>% 
@@ -413,9 +419,10 @@ server <- function(input, output) {
     # create new id2 variable for reordering (adds "___"); use id for fill
     p4 <- df_gene_selected %>%
       mutate(rank_type = as.factor(rank_type),
-             id2 = reorder_within(as.factor(id), -rank, rank_type)) %>% 
+             id2 = reorder_within(as.factor(id), -rank, rank_type),
+             is_ntc = id %in% str_replace(ntc_list, "^.*syn", "syn")) %>% 
       ggplot(aes(y = id2, x = -log10(score),
-                 fill = case_when(input$fillby == "ntc" ~ id %in% str_replace(cul3_synntc_list.txt, "^.+syn", "syn"),
+                 fill = case_when(input$fillby == "ntc" ~ is_ntc,
                                   input$fillby == "pval" ~ p_value <= 0.01,
                                   input$fillby == "fdr" ~ fdr <= 0.05),
                  rank = rank, score = score, p = p_value, fdr = fdr)) +
@@ -437,18 +444,24 @@ server <- function(input, output) {
   
   output$dotplot <- renderPlotly({
     
-    median_neg_ntc <- df_gene() %>% 
-      filter(str_detect(id, "NTC")) %>% 
+    ntc_list <- get(paste0(library_name, "_SynNTC_List.txt"))
+    
+    # only works for NTC lists where NTCs are named like XXXXX_synNTC_YYY
+    df_gene_is_ntc <- df_gene() %>% 
+      mutate(is_ntc = id %in% str_replace(ntc_list, "^.*syn", "syn"))
+    
+    median_neg_ntc <- df_gene_is_ntc %>% 
+      filter(is_ntc == TRUE) %>% 
       pull(`neg|score`) %>% 
       median()
     
-    median_pos_ntc <- df_gene() %>% 
-      filter(str_detect(id, "NTC")) %>% 
+    median_pos_ntc <- df_gene_is_ntc %>% 
+      filter(is_ntc == TRUE) %>% 
       pull(`pos|score`) %>% 
       median()
     
-    p7 <- df_gene() %>% 
-      select(id, `neg|score`, `pos|score`) %>%
+    p7 <- df_gene_is_ntc %>% 
+      select(id, is_ntc, `neg|score`, `pos|score`) %>%
       mutate(neg_log_fold_change = log10(median_neg_ntc / `neg|score`),
              pos_log_fold_change = log10(median_pos_ntc / `pos|score`)) %>%
       # reverse the sign of pos column so it will be on the bottom of the plot
@@ -460,7 +473,7 @@ server <- function(input, output) {
                  y = change_value, 
                  fill = change_type, text = id)) +
       geom_point(shape = 21, alpha = 0.8, size = 2) +
-      geom_point(data = . %>% filter(str_detect(id, "NTC")),
+      geom_point(data = . %>% filter(is_ntc == TRUE),
                  shape = 21, fill = "white", size = 2, 
                  show.legend = FALSE) +
       scale_fill_brewer(palette = "Dark2") +

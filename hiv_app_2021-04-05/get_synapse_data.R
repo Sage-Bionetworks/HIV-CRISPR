@@ -49,6 +49,7 @@ output_view <- read_csv(synTableQuery(sprintf("SELECT * FROM syn25435509",
 ## DATA FOR SINGLE COMPARISON
 
 # function to pull info, counts files, and output files and return everything as a list
+# example: syn25435417
 get_info_counts_outputs <- function(sample_sheet_id){
   sample_sheet <- unlist(read_yaml(synGet(sample_sheet_id)$path))
   
@@ -66,7 +67,6 @@ get_info_counts_outputs <- function(sample_sheet_id){
                       control_joined = left_join(info_counts_list$control1, 
                                                  info_counts_list$control2,
                                                  by = "sgRNA"))
-
   # get output files as a list
   output_list <- output_view %>% 
     filter(configId == sample_sheet_id) %>% 
@@ -82,5 +82,5 @@ get_info_counts_outputs <- function(sample_sheet_id){
                                output_list))
   
   return(results_list)
+  
 }
-
