@@ -1,11 +1,9 @@
 library(yaml)
-library(synapser)
-library(synapserutils)
-
 
 # log in to Synapse
+# don't use this if using the Shiny Synapse Template with session token
 
-synLogin()
+# synLogin()
 
 ## DATA THAT APPLIES TO ALL COMPARISONS
 

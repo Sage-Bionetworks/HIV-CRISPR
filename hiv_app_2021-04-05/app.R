@@ -1,9 +1,12 @@
 
 library(shiny)
+library(synapser)
+library(synapserutils)
 library(tidyverse)
 library(tidytext)
 library(DT)
 library(plotly)
+library(waiter)
 
 # Load common data (used for any screen) from Synapse
 source("get_synapse_data.R")
@@ -15,7 +18,16 @@ screen_choices <- output_view %>%
 
 ui <- fluidPage(
   
-  titlePanel("HIV-CRISPR data viz demo (CUL3 library only)"),
+  # synapse stuff from template
+  tags$head(
+    singleton(
+      includeScript("www/readCookie.js")
+    )
+  ),
+  
+  # titlePanel("HIV-CRISPR data viz demo (CUL3 library only)"),
+  
+  uiOutput("title"),
   
   tabsetPanel(
     tabPanel("Metadata",
@@ -155,12 +167,76 @@ ui <- fluidPage(
                )
              )
              
+    ),
+    
+    # more synapse template stuff
+    use_waiter(),
+    waiter_show_on_load(
+      html = tagList(
+        img(src = "loading.gif"),
+        h4("Retrieving Synapse information...")
+      ),
+      color = "#424874"
     )
   )
   
 )
 
 server <- function(input, output) {
+  
+  # synapse stuff from template
+  session$sendCustomMessage(type="readCookie", message=list())
+  
+  observeEvent(input$cookie, {
+    # If there's no session token, prompt user to log in
+    if (input$cookie == "unauthorized") {
+      waiter_update(
+        html = tagList(
+          img(src = "synapse_logo.png", height = "120px"),
+          h3("Looks like you're not logged in!"),
+          span("Please ", a("login", 
+                            href = "https://www.synapse.org/#!LoginPlace:0", 
+                            target = "_blank"),
+               " to Synapse, then refresh this page.")
+        )
+      )
+    } else {
+      ### login and update session; otherwise, notify to login to Synapse first
+      tryCatch({
+        synLogin(sessionToken = input$cookie, rememberMe = FALSE)
+        
+        ### update waiter loading screen once login successful
+        waiter_update(
+          html = tagList(
+            img(src = "synapse_logo.png", height = "120px"),
+            h3(sprintf("Welcome, %s!", synGetUserProfile()$userName))
+          )
+        )
+        Sys.sleep(2)
+        waiter_hide()
+      }, error = function(err) {
+        Sys.sleep(2)
+        waiter_update(
+          html = tagList(
+            img(src = "synapse_logo.png", height = "120px"),
+            h3("Login error"),
+            span(
+              "There was an error with the login process. Please refresh your Synapse session by logging out of and back in to",
+              a("Synapse", href = "https://www.synapse.org/", target = "_blank"),
+              ", then refresh this page."
+            )
+          )
+        )
+        
+      })
+      
+      # Any shiny app functionality that uses synapse should be within the
+      # input$cookie observer
+      output$title <- renderUI({
+        titlePanel(sprintf("Welcome, %s", synGetUserProfile()$userName))
+      })
+    }
+  })
   
   # get synID for chosen screen name
   sample_sheet_id <- reactive({
