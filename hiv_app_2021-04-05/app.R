@@ -21,12 +21,13 @@ ui <- fluidPage(
   
   uiOutput("title"),
   
-  tabsetPanel(id = "tabs",
+  tabsetPanel(
     tabPanel("Metadata",
              sidebarLayout(
                sidebarPanel(
+                 textInput("sample_sheet_id", "Enter Synapse ID for sample sheet, e.g. syn25435417")
                  # selectInput("sample_sheet_id", "Select screen:",
-                             # choices = screen_choices)
+                 # choices = screen_choices)
                ),
                mainPanel(
                  #h4(paste0("Screen name: ", screen_name)),
@@ -159,22 +160,24 @@ ui <- fluidPage(
                )
              )
              
-    ),
-    
-    # more synapse template stuff
-    use_waiter(),
-    waiter_show_on_load(
-      html = tagList(
-        img(src = "loading.gif"),
-        h4("Retrieving Synapse information...")
-      ),
-      color = "#424874"
     )
+    
+  ),
+  
+  # more synapse template stuff
+  # make sure this is outside the tabSetPanel
+  use_waiter(),
+  waiter_show_on_load(
+    html = tagList(
+      img(src = "loading.gif"),
+      h4("Retrieving Synapse information...")
+    ),
+    color = "#424874"
   )
   
 )
 
-server <- function(input, output) {
+server <- function(input, output, session) {
   
   # synapse stuff from template
   session$sendCustomMessage(type="readCookie", message=list())
@@ -233,6 +236,7 @@ server <- function(input, output) {
     }
   })
   
+
   # Filter output view for screens where output is currently linked with configId
   # screen_choices <- output_view %>% 
   #   filter(!is.na(configId)) %>% 
