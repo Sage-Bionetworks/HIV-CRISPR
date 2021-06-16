@@ -8,14 +8,6 @@ library(DT)
 library(plotly)
 library(waiter)
 
-# Load common data (used for any screen) from Synapse
-source("get_synapse_data.R")
-
-# Filter output view for screens where output is currently linked with configId
-screen_choices <- output_view %>% 
-  filter(!is.na(configId)) %>% 
-  pull(name)
-
 ui <- fluidPage(
   
   # synapse stuff from template
@@ -29,12 +21,12 @@ ui <- fluidPage(
   
   uiOutput("title"),
   
-  tabsetPanel(
+  tabsetPanel(id = "tabs",
     tabPanel("Metadata",
              sidebarLayout(
                sidebarPanel(
-                 selectInput("sample_sheet_id", "Select screen:",
-                             choices = screen_choices)
+                 # selectInput("sample_sheet_id", "Select screen:",
+                             # choices = screen_choices)
                ),
                mainPanel(
                  #h4(paste0("Screen name: ", screen_name)),
@@ -205,6 +197,9 @@ server <- function(input, output) {
       tryCatch({
         synLogin(sessionToken = input$cookie, rememberMe = FALSE)
         
+        # Load common data (used for any screen) from Synapse
+        source("get_synapse_data.R")
+        
         ### update waiter loading screen once login successful
         waiter_update(
           html = tagList(
@@ -237,6 +232,11 @@ server <- function(input, output) {
       })
     }
   })
+  
+  # Filter output view for screens where output is currently linked with configId
+  # screen_choices <- output_view %>% 
+  #   filter(!is.na(configId)) %>% 
+  #   pull(name)
   
   # get synID for chosen screen name
   sample_sheet_id <- reactive({
