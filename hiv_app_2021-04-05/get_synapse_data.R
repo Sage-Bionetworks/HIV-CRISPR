@@ -52,7 +52,7 @@ get_info_counts_outputs <- function(sample_sheet_id){
   sample_sheet <- unlist(read_yaml(synGet(sample_sheet_id)$path))
   
   info_counts_list <- list(library_name = sample_sheet["comparisons.library_name"],
-       comparison_name = sample_sheet["comparisons.comparison_name"],
+       screen_name = sample_sheet["comparisons.comparison_name"],
        treatment1_id = sample_sheet["comparisons.treatment_synapse_ids1"],
        treatment1 = read_tsv(synGet(unname(sample_sheet["comparisons.treatment_synapse_ids1"]))$path),
        treatment2 = read_tsv(synGet(unname(sample_sheet["comparisons.treatment_synapse_ids2"]))$path),
