@@ -11,6 +11,8 @@ library(yaml)
 libraries_raw <- syncFromSynapse("syn21915617")
 
 # name libraries_raw list using "name" from "properties"
+# otherwise "path" will be all lowercase on Windows
+# and properly capitalized on Mac
 names(libraries_raw) <- libraries_raw %>% 
   map("properties") %>% 
   map_chr("name")
