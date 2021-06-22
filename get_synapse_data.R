@@ -1,11 +1,9 @@
 library(yaml)
-library(synapser)
-library(synapserutils)
-
 
 # log in to Synapse
+# don't use this if using the Shiny Synapse Template with session token
 
-synLogin()
+# synLogin()
 
 ## DATA THAT APPLIES TO ALL COMPARISONS
 
@@ -13,6 +11,8 @@ synLogin()
 libraries_raw <- syncFromSynapse("syn21915617")
 
 # name libraries_raw list using "name" from "properties"
+# otherwise "path" will be all lowercase on Windows
+# and properly capitalized on Mac
 names(libraries_raw) <- libraries_raw %>% 
   map("properties") %>% 
   map_chr("name")
@@ -54,7 +54,7 @@ get_info_counts_outputs <- function(sample_sheet_id){
   sample_sheet <- unlist(read_yaml(synGet(sample_sheet_id)$path))
   
   info_counts_list <- list(library_name = sample_sheet["comparisons.library_name"],
-       comparison_name = sample_sheet["comparisons.comparison_name"],
+       screen_name = sample_sheet["comparisons.comparison_name"],
        treatment1_id = sample_sheet["comparisons.treatment_synapse_ids1"],
        treatment1 = read_tsv(synGet(unname(sample_sheet["comparisons.treatment_synapse_ids1"]))$path),
        treatment2 = read_tsv(synGet(unname(sample_sheet["comparisons.treatment_synapse_ids2"]))$path),
