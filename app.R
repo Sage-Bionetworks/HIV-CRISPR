@@ -22,21 +22,29 @@ ui <- fluidPage(
   uiOutput("title"),
   
   tabsetPanel(
-    tabPanel("Metadata",
+    tabPanel("Screen List",
              sidebarLayout(
-               sidebarPanel(
-                 helpText("this is hard coded with syn25435417 for now")
-                 # selectInput("sample_sheet_id", "Select screen:",
-                 # choices = screen_choices)
-               ),
+               sidebarPanel(),
                mainPanel(
-                 br(),
-                 br(),
-                 dataTableOutput("metadata")
+                 dataTableOutput("all_screens")
                )
              )
-             
-    ),    
+             ),
+    # tabPanel("Metadata",
+    #          sidebarLayout(
+    #            sidebarPanel(
+    #              helpText("this is hard coded with syn25435417 for now")
+    #              # selectInput("sample_sheet_id", "Select screen:",
+    #              # choices = screen_choices)
+    #            ),
+    #            mainPanel(
+    #              br(),
+    #              br(),
+    #              dataTableOutput("metadata")
+    #            )
+    #          )
+    #          
+    # ),    
     tabPanel("Output data",
              sidebarLayout(
                sidebarPanel(
@@ -234,6 +242,12 @@ server <- function(input, output, session) {
       # Load common data (used for any screen) from Synapse
       source("get_synapse_data.R")
       
+      # Show metadata for all screens
+      output$all_screens <- renderDataTable({
+        metadata %>% 
+          datatable(rownames = FALSE)
+      })
+      
       # get synID for chosen screen name
       sample_sheet_id <- reactive({
         output_view %>% 
@@ -250,7 +264,7 @@ server <- function(input, output, session) {
           list2env(., .GlobalEnv)
         
         metadata %>% 
-          filter(id == treatment1_id) %>%
+          filter(configId == "syn25435417") %>%
           select(-starts_with("ROW_")) %>% 
           pivot_longer(cols = everything(),
                        names_to = "field", values_to = "value",

@@ -36,8 +36,8 @@ CUL3_GO_GC <- CUL3_metascape.csv %>%
   mutate(genecards = paste0("<a href='https://www.genecards.org/cgi-bin/carddisp.pl?id_type=entrezgene&id=", `Gene ID`, "' target='_blank'>", `Gene Symbol`, "</a>"),
          .after = `Gene ID`)
 
-# Get File View with metadata for all files
-metadata <- read_csv(synTableQuery(sprintf("SELECT * FROM syn21763191", "syn21763191"))$filepath) %>% 
+# Get MAGeCK Output View with metadata for all output folders
+metadata <- read_csv(synTableQuery(sprintf("SELECT * FROM syn25976216", "syn25976216"))$filepath) %>% 
   select(-starts_with("ROW"))
 
 # Get File View linking sample sheets to output files using configId
