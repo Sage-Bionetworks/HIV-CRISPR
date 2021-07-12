@@ -29,22 +29,21 @@ ui <- fluidPage(
                  dataTableOutput("all_screens")
                )
              )
-             ),
-    # tabPanel("Metadata",
-    #          sidebarLayout(
-    #            sidebarPanel(
-    #              helpText("this is hard coded with syn25435417 for now")
-    #              # selectInput("sample_sheet_id", "Select screen:",
-    #              # choices = screen_choices)
-    #            ),
-    #            mainPanel(
-    #              br(),
-    #              br(),
-    #              dataTableOutput("metadata")
-    #            )
-    #          )
-    #          
-    # ),    
+    ),
+    tabPanel("Metadata",
+             sidebarLayout(
+               sidebarPanel(
+                 p("Selected screen: ",
+                   textOutput("selected_screen", inline = TRUE))
+               ),
+               mainPanel(
+                 br(),
+                 br(),
+                 dataTableOutput("metadata")
+               )
+             )
+
+    ),
     tabPanel("Output data",
              sidebarLayout(
                sidebarPanel(
@@ -233,7 +232,7 @@ server <- function(input, output, session) {
       })
       
       # Any shiny app functionality that uses synapse should be within the
-      # input$cookie observer
+      # input$cookie observer (so basically everything)
       output$title <- renderUI({
         titlePanel(sprintf("Welcome, %s", synGetUserProfile()$userName))
         
@@ -242,29 +241,40 @@ server <- function(input, output, session) {
       # Load common data (used for any screen) from Synapse
       source("get_synapse_data.R")
       
-      # Show metadata for all screens
+      # Show metadata for all screens that have a configId
       output$all_screens <- renderDataTable({
         metadata %>% 
-          datatable(rownames = FALSE)
+          filter(!is.na(configId)) %>% 
+          datatable(rownames = FALSE,
+                    selection = list(mode = "single")) 
       })
       
       # get synID for chosen screen name
       sample_sheet_id <- reactive({
-        output_view %>% 
-          filter(name == input$sample_sheet_id) %>% 
+        metadata %>% 
+          filter(!is.na(configId)) %>% 
+          filter(row_number() %in% input$all_screens_rows_selected) %>%  
           pull(configId)
+      })
+      
+      # print selected screen id
+      output$selected_screen <- renderText({
+        metadata %>% 
+          filter(!is.na(configId)) %>% 
+          filter(row_number() %in% input$all_screens_rows_selected) %>%  
+          pull(name, configId)
       })
       
       # screen metadata (from treatment replicate 1)
       output$metadata <- renderDataTable({
         
         # get data for specified screen
-        # get_info_counts_outputs(sample_sheet_id()) %>%
-          get_info_counts_outputs("syn25435417") %>%
+        get_info_counts_outputs(sample_sheet_id()) %>%
+        #get_info_counts_outputs("syn25435417") %>%
           list2env(., .GlobalEnv)
         
         metadata %>% 
-          filter(configId == "syn25435417") %>%
+          filter(configId == sample_sheet_id()) %>%
           select(-starts_with("ROW_")) %>% 
           pivot_longer(cols = everything(),
                        names_to = "field", values_to = "value",
@@ -582,7 +592,7 @@ server <- function(input, output, session) {
   #   filter(!is.na(configId)) %>% 
   #   pull(name)
   
-
+  
   
 }
 
