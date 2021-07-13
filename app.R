@@ -22,14 +22,14 @@ ui <- fluidPage(
   uiOutput("title"),
   
   tabsetPanel(
-    tabPanel("Screen List",
-             sidebarLayout(
-               sidebarPanel(),
-               mainPanel(
-                 dataTableOutput("all_screens")
-               )
-             )
-    ),
+    # tabPanel("Screen List",
+    #          sidebarLayout(
+    #            sidebarPanel(),
+    #            mainPanel(
+    #              dataTableOutput("all_screens")
+    #            )
+    #          )
+    # ),
     tabPanel("Metadata",
              sidebarLayout(
                sidebarPanel(
@@ -38,6 +38,7 @@ ui <- fluidPage(
                ),
                mainPanel(
                  br(),
+                 dataTableOutput("all_screens"),
                  br(),
                  dataTableOutput("metadata")
                )
