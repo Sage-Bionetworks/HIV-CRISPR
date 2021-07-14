@@ -10,26 +10,18 @@ library(waiter)
 
 ui <- fluidPage(
   
-  # synapse stuff from template
+  # Synapse stuff from template
   tags$head(
     singleton(
       includeScript("www/readCookie.js")
     )
   ),
   
-  # titlePanel("HIV-CRISPR data viz demo (CUL3 library only)"),
+  titlePanel("HIV-CRISPR data viz demo (CUL3 library only)"),
   
   uiOutput("title"),
   
   tabsetPanel(
-    # tabPanel("Screen List",
-    #          sidebarLayout(
-    #            sidebarPanel(),
-    #            mainPanel(
-    #              dataTableOutput("all_screens")
-    #            )
-    #          )
-    # ),
     tabPanel("Metadata",
              sidebarLayout(
                sidebarPanel(
@@ -39,11 +31,11 @@ ui <- fluidPage(
                mainPanel(
                  br(),
                  dataTableOutput("all_screens"),
-                 br(),
+                 hr(),
                  dataTableOutput("metadata")
                )
              )
-
+             
     ),
     tabPanel("Output data",
              sidebarLayout(
@@ -167,11 +159,26 @@ ui <- fluidPage(
                )
              )
              
+    ),
+    tabPanel("Compare 2 Screens",
+             sidebarLayout(
+               sidebarPanel(
+                 p("Selected screens: ",
+                   br(),
+                   textOutput("selected_2_screens", inline = TRUE))
+               ),
+               mainPanel(
+                 br(),
+                 dataTableOutput("all_screens_2"),
+                 hr(),
+                 plotlyOutput("compare_plot")
+               )
+             )
+             
     )
-    
   ),
   
-  # more synapse template stuff
+  # more Synapse template stuff
   # make sure this is outside the tabSetPanel
   use_waiter(),
   waiter_show_on_load(
@@ -186,7 +193,9 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
   
-  # synapse stuff from template
+  # Synapse stuff from template
+  # shows fancy loading screen
+  # checks if you are logged in to Synapse
   session$sendCustomMessage(type="readCookie", message=list())
   
   observeEvent(input$cookie, {
@@ -271,7 +280,7 @@ server <- function(input, output, session) {
         
         # get data for specified screen
         get_info_counts_outputs(sample_sheet_id()) %>%
-        #get_info_counts_outputs("syn25435417") %>%
+          #get_info_counts_outputs("syn25435417") %>%
           list2env(., .GlobalEnv)
         
         metadata %>% 
@@ -462,6 +471,7 @@ server <- function(input, output, session) {
           pivot_longer(cols = ends_with("fdr"), names_to = "fdr_type", values_to = "fdr") %>%
           arrange(rank) %>%
           filter(rank <= input$topn) %>%
+          # only look at neg|score for neg|rank and pos|score for pos_rank
           filter(case_when(rank_type == "neg|rank" ~ score_type == "neg|score",
                            rank_type == "pos|rank" ~ score_type == "pos|score")) %>%
           filter(case_when(rank_type == "neg|rank" ~ p_type == "neg|p-value",
@@ -584,15 +594,100 @@ server <- function(input, output, session) {
         
       })
       
+      # show all screens again for multiple selection
+      output$all_screens_2 <- renderDataTable({
+        metadata %>% 
+          filter(!is.na(configId)) %>% 
+          datatable(rownames = FALSE) 
+      })
+
+      # get synIDs for selected datatable rows
+      screen_choices <- reactive({
+        metadata %>% 
+          filter(!is.na(configId)) %>% 
+          filter(row_number() %in% input$all_screens_2_rows_selected) %>%  
+          pull(configId)
+      })
+      
+      # print selected screen ids
+      output$selected_2_screens <- renderText({
+        metadata %>%
+          filter(!is.na(configId)) %>%
+          filter(row_number() %in% input$all_screens_2_rows_selected) %>%
+          pull(name, configId)
+      })
+
+      output$compare_plot <- renderPlotly({
+        
+        # get configIds from screen_choices
+        configId1 <- screen_choices()[1]
+        configId2 <- screen_choices()[2]
+        
+        # get output files as a list
+        output_view %>% 
+          filter(configId == configId1) %>% 
+          pull(id) %>% 
+          syncFromSynapse() %>% 
+          map_chr("path") %>% 
+          set_names(paste0("configId1_", basename(.))) %>% 
+          map(read_tsv) %>% 
+          list2env(., .GlobalEnv)
+        
+        output_view %>% 
+          filter(configId == configId2) %>% 
+          pull(id) %>% 
+          syncFromSynapse() %>% 
+          map_chr("path") %>% 
+          set_names(paste0("configId2_", basename(.))) %>% 
+          map(read_tsv) %>% 
+          list2env(., .GlobalEnv)
+        
+        # only comparing genes in common between the 2 screens
+        compare_scores <- configId1_median_norm.gene_summary.txt %>% 
+          select(id, `neg|score`, `pos|score`) %>% 
+          full_join(select(configId2_median_norm.gene_summary.txt, 
+                           id, `neg|score`, `pos|score`),
+                    by = "id",
+                    suffix = c("_configId1", "_configId2")) %>% 
+          pivot_longer(cols = contains("score"), names_to = "score_type", values_to = "score") %>% 
+          separate(score_type, into = c("score_type", "screen"), sep = "_")
+        
+        compare_ranks <- configId1_median_norm.gene_summary.txt %>% 
+          select(id, `neg|rank`, `pos|rank`) %>% 
+          full_join(select(configId2_median_norm.gene_summary.txt, 
+                           id, `neg|rank`, `pos|rank`),
+                    by = "id",
+                    suffix = c("_configId1", "_configId2")) %>% 
+          pivot_longer(cols = contains("rank"), names_to = "rank_type", values_to = "rank") %>% 
+          separate(rank_type, into = c("rank_type", "screen"), sep = "_")
+        
+        compare_scores_ranks <- full_join(compare_scores, compare_ranks, by = c("id", "screen")) %>% 
+          filter((str_detect(score_type, "neg") & str_detect(rank_type, "neg")) |
+                   (str_detect(score_type, "pos") & str_detect(rank_type, "pos"))) %>% 
+          mutate(score_type = str_replace(score_type, "\\|.*$", "")) %>% 
+          select(-rank_type) %>% 
+          pivot_wider(names_from = screen, values_from = c(score, rank)) 
+        
+        p8 <- compare_scores_ranks %>% 
+          ggplot(aes(x = -log10(score_configId1), y = -log10(score_configId2), 
+                     id = id, rank_configId1 = rank_configId1, rank_configId2 = rank_configId2)) +
+          geom_point(shape = 21) +
+          geom_abline(slope = 1) +
+          facet_wrap(~score_type, scales = "free") +
+          geom_point(data = compare_scores_ranks %>% slice_min(rank_configId1, n = 20),
+                     shape = 21, size = 3, fill = "turquoise4") +
+          geom_point(data = compare_scores_ranks %>% slice_min(rank_configId2, n = 20),
+                     shape = 21, size = 3, fill = "turquoise4") +
+          xlab(paste0(output_view %>% filter(configId == configId1) %>% pull(name), " (configId1)")) +
+          ylab(paste0(output_view %>% filter(configId == configId2) %>% pull(name), " (configId2)")) +
+          ggtitle("Comparison of -log10(score) for 2 screens, with top 20 hits for each highlighted")
+        
+        ggplotly(p8, tooltip = c("id", "x", "y", "rank_configId1", "rank_configId2"))
+        
+      })
     }
+    
   })
-  
-  
-  # Filter output view for screens where output is currently linked with configId
-  # screen_choices <- output_view %>% 
-  #   filter(!is.na(configId)) %>% 
-  #   pull(name)
-  
   
   
 }
