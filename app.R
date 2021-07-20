@@ -633,10 +633,6 @@ server <- function(input, output, session) {
         configId1 <- screen_choices()[1]
         configId2 <- screen_choices()[2]
         
-        # set output filenames
-        configId1_output_df <- get(paste0("configId1_", output_file()))
-        configId2_output_df <- get(paste0("configId2_", output_file()))
-        
         # get output files as a list
         output_view %>% 
           filter(configId == configId1) %>% 
@@ -655,6 +651,10 @@ server <- function(input, output, session) {
           set_names(paste0("configId2_", basename(.))) %>% 
           map(read_tsv) %>% 
           list2env(., .GlobalEnv)
+ 
+        # set output df names
+        configId1_output_df <- get(paste0("configId1_", output_file()))
+        configId2_output_df <- get(paste0("configId2_", output_file()))
         
         # only comparing genes in common between the 2 screens
         compare_scores <- configId1_output_df %>% 
