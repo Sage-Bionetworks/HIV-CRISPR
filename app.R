@@ -260,6 +260,14 @@ server <- function(input, output, session) {
         metadata %>% 
           filter(!is.na(configId)) %>% 
           datatable(rownames = FALSE,
+                    filter = "top",
+                    extensions = c("Buttons", "ColReorder"),
+                    options = list(search = list(regex = TRUE),
+                                   dom = "Bfrtip",
+                                   buttons = I("colvis"),
+                                   colReorder = list(realtime = FALSE)),
+                    caption = paste0(input$showdata, ".gene_summary"),
+                    escape = FALSE,
                     selection = list(mode = "single")) 
       })
       
@@ -317,6 +325,7 @@ server <- function(input, output, session) {
         
         datatable(df_gene_gc,
                   rownames = FALSE,
+                  filter = "top",
                   extensions = c("Buttons", "ColReorder"),
                   options = list(search = list(regex = TRUE),
                                  dom = "Bfrtip",
@@ -651,7 +660,7 @@ server <- function(input, output, session) {
           set_names(paste0("configId2_", basename(.))) %>% 
           map(read_tsv) %>% 
           list2env(., .GlobalEnv)
- 
+        
         # set output df names
         configId1_output_df <- get(paste0("configId1_", output_file()))
         configId2_output_df <- get(paste0("configId2_", output_file()))
@@ -685,7 +694,7 @@ server <- function(input, output, session) {
         p8 <- compare_scores_ranks %>% 
           ggplot(aes(x = -log10(score_configId1), y = -log10(score_configId2), 
                      id = id, rank_configId1 = rank_configId1, rank_configId2 = rank_configId2)) +
-          geom_point(shape = 21) +
+          geom_point(shape = 21, alpha = 0.5) +
           geom_abline(slope = 1) +
           facet_wrap(~score_type, scales = "free") +
           geom_point(data = compare_scores_ranks %>% slice_min(rank_configId1, n = 20),
@@ -698,7 +707,7 @@ server <- function(input, output, session) {
         
         ggplotly(p8, tooltip = c("id", "x", "y", 
                                  "rank_configId1", "rank_configId2")) %>% 
-          layout(margin = list(l = 50))
+          layout(margin = list(l = 150))
         
       })
     }
