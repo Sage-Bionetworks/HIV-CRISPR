@@ -25,6 +25,15 @@ ui <- fluidPage(
     tabPanel("Metadata",
              sidebarLayout(
                sidebarPanel(
+                 helpText("This table shows metadata for all screens. 
+                        Select a screen to use in the next 5 tabs.",
+                        br(), br(),
+                        "Drag columns to reorder, 
+                        or click 'Column visibility' to show/hide columns. 
+                        Click to select multiple rows for plotting. 
+                        Selected genes will be listed below. 
+                        Search box accepts regular expressions (ie. use '|' for OR).",
+                        br(), br()),
                  p("Selected screen: ",
                    textOutput("selected_screen", inline = TRUE))
                ),
@@ -40,15 +49,19 @@ ui <- fluidPage(
     tabPanel("Output data",
              sidebarLayout(
                sidebarPanel(
+                 helpText("This table shows output data for the selected screen. 
+                        Select genes to plot in the next 3 tabs.",
+                        br(), br(),
+                        "Drag columns to reorder, 
+                          or click 'Column visibility' to show/hide columns. 
+                          Click to select multiple rows for plotting. 
+                          Selected genes will be listed below. 
+                          Search box accepts regular expressions (ie. use '|' for OR).",
+                        br(), br()),
                  radioButtons("showdata", "Select output files to show:",
                               choices = list("median_norm.gene_summary" = "median_norm",
                                              "control_norm.gene_summary" = "control_norm"),
                               selected = "median_norm"),
-                 helpText("Drag columns to reorder, 
-                          or click 'Column visibility' to show/hide columns. 
-                          Click to select multiple rows for plotting. 
-                          Selected genes will be listed below. 
-                          Search box accepts regular expressions (ie. use '|' for OR)"),
                  actionButton("clear", "Clear selections"),
                  br(),
                  br(),
@@ -266,7 +279,6 @@ server <- function(input, output, session) {
                                    dom = "Bfrtip",
                                    buttons = I("colvis"),
                                    colReorder = list(realtime = FALSE)),
-                    caption = paste0(input$showdata, ".gene_summary"),
                     escape = FALSE,
                     selection = list(mode = "single")) 
       })
