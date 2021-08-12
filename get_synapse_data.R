@@ -72,7 +72,7 @@ get_screen_data <- function(folder_id){
 metadata %>% 
   filter(!is.na(configId)) %>%
   pull(id) %>% 
-  map(get_screen_data) %>% 
+  map(get_screen_data) 
 
 
 ## GET COUNT FILES FOR SINGLE SCREEN
@@ -88,12 +88,13 @@ get_counts <- function(configId){
                            control1 = read_tsv(synGet(unname(sample_sheet["comparisons.control_synapse_ids1"]))$path),
                            control2 = read_tsv(synGet(unname(sample_sheet["comparisons.control_synapse_ids2"]))$path))
   
-  list(treatment_joined = left_join(info_counts_list$treatment1,
+  joined_list <- list(treatment_joined = left_join(info_counts_list$treatment1,
                                                    info_counts_list$treatment2, 
                                                    by = "sgRNA"),
                       control_joined = left_join(info_counts_list$control1, 
                                                  info_counts_list$control2,
-                                                 by = "sgRNA")) %>% 
+                                                 by = "sgRNA")) 
+  flatten(list(info_counts_list, joined_list)) %>% 
     list2env(., .GlobalEnv)
 }
 

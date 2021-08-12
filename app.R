@@ -35,7 +35,7 @@ ui <- fluidPage(
                         Search box accepts regular expressions (ie. use '|' for OR).",
                         br(), br()),
                  p("Selected screen: ",
-                   textOutput("selected_screen", inline = TRUE))
+                   textOutput("show_selected_screen", inline = TRUE))
                ),
                mainPanel(
                  br(),
@@ -265,7 +265,7 @@ server <- function(input, output, session) {
         
       })
       
-      # Load common data (used for any screen) from Synapse
+      # Load data from Synapse
       source("get_synapse_data.R")
       
       # Show metadata for all screens that have a configId
@@ -291,20 +291,23 @@ server <- function(input, output, session) {
           pull(configId)
       })
       
-      # print selected screen id
-      output$selected_screen <- renderText({
+      # get selected screen id and then print (separate bc need to use selected_screen again later)
+      selected_screen <- reactive({
         metadata %>% 
           filter(!is.na(configId)) %>% 
           filter(row_number() %in% input$all_screens_rows_selected) %>%  
-          pull(name, configId)
+          pull(name)
+      })
+      
+      output$show_selected_screen <- renderText({
+        selected_screen()
       })
       
       # screen metadata (from treatment replicate 1)
       output$metadata <- renderDataTable({
         
         # get data for specified screen
-        get_info_counts_outputs(sample_sheet_id()) %>%
-          list2env(., .GlobalEnv)
+        get_counts(sample_sheet_id())
         
         metadata %>% 
           filter(configId == sample_sheet_id()) %>%
@@ -319,9 +322,9 @@ server <- function(input, output, session) {
       # choose dataset for Data tab
       df_gene <- reactive({
         if (input$showdata == "median_norm"){
-          df_gene <- median_norm.gene_summary.txt
+          df_gene <- get(paste0(selected_screen(), "_median_norm.gene_summary.txt"))
         } else {
-          df_gene <- control_norm.gene_summary.txt
+          df_gene <- get(paste0(selected_screen(), "_control_norm.gene_summary.txt"))
         }
       })
       
@@ -447,9 +450,9 @@ server <- function(input, output, session) {
       # choose dataset for sgRNA tab
       df_sgRNA <- reactive({
         if (input$showdata == "median_norm"){
-          df_sgRNA <- median_norm.sgrna_summary.txt
+          df_sgRNA <- get(paste0(selected_screen(), "_median_norm.sgrna_summary.txt"))
         } else {
-          df_sgRNA <- control_norm.sgrna_summary.txt
+          df_sgRNA <- get(paste0(selected_screen(), "_control_norm.sgrna_summary.txt"))
         }
       })
       
