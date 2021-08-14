@@ -178,7 +178,7 @@ ui <- fluidPage(
                sidebarPanel(
                  p("Selected screens: ",
                    br(),
-                   textOutput("selected_2_screens", inline = TRUE)),
+                   htmlOutput("selected_2_screens", inline = TRUE)),
                  radioButtons("norm_type", "Select output files to use:",
                               choices = list("median_norm.gene_summary" = "median_norm",
                                              "control_norm.gene_summary" = "control_norm"),
@@ -619,83 +619,61 @@ server <- function(input, output, session) {
         
       })
       
-      # show all screens again for multiple selection
+      # show all screens again, this time with multiple selection
       output$all_screens_2 <- renderDataTable({
         metadata %>% 
           filter(!is.na(configId)) %>% 
           datatable(rownames = FALSE) 
       })
       
-      # get synIDs for selected datatable rows
+      # get screen names from selected datatable rows
       screen_choices <- reactive({
         metadata %>% 
           filter(!is.na(configId)) %>% 
           filter(row_number() %in% input$all_screens_2_rows_selected) %>%  
-          pull(configId)
+          pull(name)
       })
       
-      # print selected screen ids
+      # print selected screen names
       output$selected_2_screens <- renderText({
-        metadata %>%
-          filter(!is.na(configId)) %>%
-          filter(row_number() %in% input$all_screens_2_rows_selected) %>%
-          pull(name, configId)
+        HTML(paste(screen_choices()[1], screen_choices()[2], sep = "<br>"))
       })
       
-      # choose output file to use
-      output_file <- reactive({
+      # choose output file type to use
+      output_file_type <- reactive({
         if (input$norm_type == "median_norm"){
-          output_file <- "median_norm.gene_summary.txt"
+          output_file_type <- "median_norm.gene_summary.txt"
         } else {
-          output_file <- "control_norm.gene_summary.txt"
+          output_file_type <- "control_norm.gene_summary.txt"
         }
       })
       
       output$compare_plot <- renderPlotly({
         
-        # get configIds from screen_choices
-        configId1 <- screen_choices()[1]
-        configId2 <- screen_choices()[2]
-        
-        # get output files as a list
-        output_view %>% 
-          filter(configId == configId1) %>% 
-          pull(id) %>% 
-          syncFromSynapse() %>% 
-          map_chr("path") %>% 
-          set_names(paste0("configId1_", basename(.))) %>% 
-          map(read_tsv) %>% 
-          list2env(., .GlobalEnv)
-        
-        output_view %>% 
-          filter(configId == configId2) %>% 
-          pull(id) %>% 
-          syncFromSynapse() %>% 
-          map_chr("path") %>% 
-          set_names(paste0("configId2_", basename(.))) %>% 
-          map(read_tsv) %>% 
-          list2env(., .GlobalEnv)
-        
+        # get screen names for each selected screen
+        screen1 <- screen_choices()[1]
+        screen2 <- screen_choices()[2]
+       
         # set output df names
-        configId1_output_df <- get(paste0("configId1_", output_file()))
-        configId2_output_df <- get(paste0("configId2_", output_file()))
+        screen1_output_df <- get(paste0(screen1, "_", output_file_type()))
+        screen2_output_df <- get(paste0(screen2, "_", output_file_type()))
         
         # only comparing genes in common between the 2 screens
-        compare_scores <- configId1_output_df %>% 
+        compare_scores <- screen1_output_df %>% 
           select(id, `neg|score`, `pos|score`) %>% 
-          full_join(select(configId2_output_df, 
+          full_join(select(screen2_output_df, 
                            id, `neg|score`, `pos|score`),
                     by = "id",
-                    suffix = c("_configId1", "_configId2")) %>% 
+                    suffix = c("_screen1", "_screen2")) %>% 
           pivot_longer(cols = contains("score"), names_to = "score_type", values_to = "score") %>% 
           separate(score_type, into = c("score_type", "screen"), sep = "_")
         
-        compare_ranks <- configId1_output_df %>% 
+        compare_ranks <- screen1_output_df %>% 
           select(id, `neg|rank`, `pos|rank`) %>% 
-          full_join(select(configId2_output_df, 
+          full_join(select(screen2_output_df, 
                            id, `neg|rank`, `pos|rank`),
                     by = "id",
-                    suffix = c("_configId1", "_configId2")) %>% 
+                    suffix = c("_screen1", "_screen2")) %>% 
           pivot_longer(cols = contains("rank"), names_to = "rank_type", values_to = "rank") %>% 
           separate(rank_type, into = c("rank_type", "screen"), sep = "_")
         
@@ -707,21 +685,21 @@ server <- function(input, output, session) {
           pivot_wider(names_from = screen, values_from = c(score, rank)) 
         
         p8 <- compare_scores_ranks %>% 
-          ggplot(aes(x = -log10(score_configId1), y = -log10(score_configId2), 
-                     id = id, rank_configId1 = rank_configId1, rank_configId2 = rank_configId2)) +
+          ggplot(aes(x = -log10(score_screen1), y = -log10(score_screen2), 
+                     id = id, rank_screen1 = rank_screen1, rank_screen2 = rank_screen2)) +
           geom_point(shape = 21, alpha = 0.5) +
           geom_abline(slope = 1) +
           facet_wrap(~score_type, scales = "free") +
-          geom_point(data = compare_scores_ranks %>% slice_min(rank_configId1, n = 20),
+          geom_point(data = compare_scores_ranks %>% slice_min(rank_screen1, n = 20),
                      shape = 21, size = 3, fill = "turquoise4") +
-          geom_point(data = compare_scores_ranks %>% slice_min(rank_configId2, n = 20),
+          geom_point(data = compare_scores_ranks %>% slice_min(rank_screen2, n = 20),
                      shape = 21, size = 3, fill = "turquoise4") +
-          xlab(paste0(output_view %>% filter(configId == configId1) %>% pull(name), " (configId1)")) +
-          ylab(paste0(output_view %>% filter(configId == configId2) %>% pull(name), " (configId2)")) +
+          xlab(paste0(screen1, "\n(screen1)")) +
+          ylab(paste0(screen2, "\n(screen2)")) +
           ggtitle("Comparison of -log10(score) for 2 screens, with top 20 hits for each highlighted")
         
         ggplotly(p8, tooltip = c("id", "x", "y", 
-                                 "rank_configId1", "rank_configId2")) %>% 
+                                 "rank_screen1", "rank_screen2")) %>% 
           layout(margin = list(l = 150))
         
       })
