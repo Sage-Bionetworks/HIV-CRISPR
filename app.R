@@ -188,7 +188,9 @@ ui <- fluidPage(
                  br(),
                  dataTableOutput("all_screens_2"),
                  hr(),
-                 plotlyOutput("compare_plot")
+                 plotlyOutput("compare_plot"),
+                 br(),
+                 dataTableOutput("gene_all_screens_table")
                )
              )
              
@@ -684,9 +686,12 @@ server <- function(input, output, session) {
           select(-rank_type) %>% 
           pivot_wider(names_from = screen, values_from = c(score, rank)) 
         
+        # set up key for plotly_click
+        compare_scores_ranks$key <- row.names(compare_scores_ranks)
+        
         p8 <- compare_scores_ranks %>% 
           ggplot(aes(x = -log10(score_screen1), y = -log10(score_screen2), 
-                     id = id, rank_screen1 = rank_screen1, rank_screen2 = rank_screen2)) +
+                     id = id, key = key, rank_screen1 = rank_screen1, rank_screen2 = rank_screen2)) +
           geom_point(shape = 21, alpha = 0.5) +
           geom_abline(slope = 1) +
           facet_wrap(~score_type, scales = "free") +
@@ -698,11 +703,24 @@ server <- function(input, output, session) {
           ylab(paste0(screen2, "\n(screen2)")) +
           ggtitle("Comparison of -log10(score) for 2 screens, with top 20 hits for each highlighted")
         
-        ggplotly(p8, tooltip = c("id", "x", "y", 
-                                 "rank_screen1", "rank_screen2")) %>% 
+        ggplotly(p8, source = "compare2_plot",
+                 tooltip = c("id", "x", "y", "rank_screen1", "rank_screen2")) %>% 
           layout(margin = list(l = 150))
         
       })
+      
+      # selected_gene <- reactive({
+      #   event_data("plotly_click",
+      #              source = "compare2_plot")
+      # })
+      
+      output$gene_all_screens_table <- renderDataTable({
+        
+        datatable(event_data(source = "compare2_plot",
+                                 "plotly_click"))
+
+      })
+      
     }
     
   })
