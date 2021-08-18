@@ -273,7 +273,6 @@ server <- function(input, output, session) {
       # Show metadata for all screens that have a configId
       output$all_screens <- renderDataTable({
         metadata %>% 
-          filter(!is.na(configId)) %>% 
           datatable(rownames = FALSE,
                     filter = "top",
                     extensions = c("Buttons", "ColReorder"),
@@ -285,10 +284,9 @@ server <- function(input, output, session) {
                     selection = list(mode = "single")) 
       })
       
-      # get synID for chosen screen name
+      # get synID for chosen screen
       sample_sheet_id <- reactive({
         metadata %>% 
-          filter(!is.na(configId)) %>% 
           filter(row_number() %in% input$all_screens_rows_selected) %>%  
           pull(configId)
       })
@@ -296,7 +294,6 @@ server <- function(input, output, session) {
       # get selected screen id and then print (separate bc need to use selected_screen again later)
       selected_screen <- reactive({
         metadata %>% 
-          filter(!is.na(configId)) %>% 
           filter(row_number() %in% input$all_screens_rows_selected) %>%  
           pull(name)
       })
@@ -335,6 +332,7 @@ server <- function(input, output, session) {
         
         # bring in GeneCards links
         # don't replace gene id with link - there are a few differences between `MyList` and `Gene Symbol`
+        ### Update when I get Metascape data for the rest of the libraries
         df_gene_gc <- df_gene() %>% 
           left_join(select(CUL3_GO_GC, genecards, `Gene Symbol`), 
                     by = c("id" = "Gene Symbol")) %>% 
@@ -624,14 +622,12 @@ server <- function(input, output, session) {
       # show all screens again, this time with multiple selection
       output$all_screens_2 <- renderDataTable({
         metadata %>% 
-          filter(!is.na(configId)) %>% 
           datatable(rownames = FALSE) 
       })
       
       # get screen names from selected datatable rows
       screen_choices <- reactive({
         metadata %>% 
-          filter(!is.na(configId)) %>% 
           filter(row_number() %in% input$all_screens_2_rows_selected) %>%  
           pull(name)
       })

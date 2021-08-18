@@ -8,7 +8,7 @@ library(yaml)
 
 ## GET LIBRARY & GENECARDS DATA
 
-# get the libraries folder
+# sync the Libraries folder
 libraries_raw <- syncFromSynapse("syn21915617")
 
 # name libraries_raw list using "name" from "properties"
@@ -18,21 +18,22 @@ names(libraries_raw) <- libraries_raw %>%
   map("properties") %>% 
   map_chr("name")
 
-# get individual library files (CSVs with headers)
-libraries_raw %>% 
-  map_chr("path") %>% 
-  keep(~ str_detect(.x, "csv")) %>% 
-  map(read_csv, col_names = TRUE) %>%
-  list2env(., .GlobalEnv)
-
-# get individual synNTC lists (txt files without headers)
+# get synNTC lists (txt files without headers)
 libraries_raw %>% 
   map_chr("path") %>% 
   keep(~ str_detect(.x, "txt")) %>% 
   map(read_lines) %>%
   list2env(., .GlobalEnv)
 
+# get the Metascape files (CSVs with "metascape" in filename)
+libraries_raw %>% 
+  map_chr("path") %>% 
+  keep(~ str_detect(.x, "metascape")) %>% 
+  map(read_csv, col_names = TRUE) %>%
+  list2env(., .GlobalEnv)
+
 # add column of GeneCards URLs to CUL3 Metascape data - will join to df_gene in app
+### Update when I get Metascape data for the other libraries
 CUL3_GO_GC <- CUL3_metascape.csv %>% 
   mutate(genecards = paste0("<a href='https://www.genecards.org/cgi-bin/carddisp.pl?id_type=entrezgene&id=", `Gene ID`, "' target='_blank'>", `Gene Symbol`, "</a>"),
          .after = `Gene ID`)
@@ -40,14 +41,24 @@ CUL3_GO_GC <- CUL3_metascape.csv %>%
 
 ## GET METADATA FOR ALL SCREENS
 
-# Get MAGeCK Output View with metadata for all output folders
-metadata <- read_csv(synTableQuery(sprintf("SELECT * FROM syn25976216", "syn25976216"))$filepath) %>% 
+# get "MAGeCK output with metadata" View that shows metadata for all output folders
+
+metadata <- synTableQuery("SELECT * FROM syn25976216")$asDataFrame() %>% 
   select(-starts_with("ROW"))
 
-# Get File View linking sample sheets to output files using configId
-# output_view <- read_csv(synTableQuery(sprintf("SELECT * FROM syn25435509", 
-#                                               "syn25435509"))$filepath) %>% 
-#   select(-starts_with("ROW"))
+# also get "YAMLs and Outputs" Submission View linking sample sheets to output folders
+# rename "entityid" to "configId" (since entityid is a default colname and could show up in other tables)
+
+submissions <- synTableQuery("SELECT entityid, output_folder FROM syn26053275 
+                    where status = 'ACCEPTED'")$asDataFrame() %>% 
+  select(configId = entityid, output_folder)
+
+# add configId column to metadata by matching on output folder id
+# and only keep rows that have a configId
+metadata <- metadata %>% 
+  right_join(select(submissions, configId, output_folder), 
+             by = c("id" = "output_folder")) %>% 
+  select(id, name, configId, everything())
 
 
 ## GET OUTPUT DATA FOR ALL SCREENS
@@ -67,10 +78,9 @@ get_screen_data <- function(folder_id){
     list2env(., .GlobalEnv)
 }
 
-# now map to all screens
+# run above function for all screens
 
 metadata %>% 
-  filter(!is.na(configId)) %>%
   pull(id) %>% 
   map(get_screen_data) 
 
@@ -80,13 +90,13 @@ metadata %>%
 get_counts <- function(configId){
   sample_sheet <- unlist(read_yaml(synGet(configId)$path))
   
-  info_counts_list <- list(library_name = sample_sheet["comparisons.library_name"],
-                           screen_name = sample_sheet["comparisons.comparison_name"],
-                           treatment1_id = sample_sheet["comparisons.treatment_synapse_ids1"],
-                           treatment1 = read_tsv(synGet(unname(sample_sheet["comparisons.treatment_synapse_ids1"]))$path),
-                           treatment2 = read_tsv(synGet(unname(sample_sheet["comparisons.treatment_synapse_ids2"]))$path),
-                           control1 = read_tsv(synGet(unname(sample_sheet["comparisons.control_synapse_ids1"]))$path),
-                           control2 = read_tsv(synGet(unname(sample_sheet["comparisons.control_synapse_ids2"]))$path))
+  info_counts_list <- list(library_name = sample_sheet["library_name"],
+                           screen_name = sample_sheet["comparison_name"],
+                           treatment1_id = sample_sheet["treatment_synapse_ids1"],
+                           treatment1 = read_tsv(synGet(unname(sample_sheet["treatment_synapse_ids1"]))$path),
+                           treatment2 = read_tsv(synGet(unname(sample_sheet["treatment_synapse_ids2"]))$path),
+                           control1 = read_tsv(synGet(unname(sample_sheet["control_synapse_ids1"]))$path),
+                           control2 = read_tsv(synGet(unname(sample_sheet["control_synapse_ids2"]))$path))
   
   joined_list <- list(treatment_joined = left_join(info_counts_list$treatment1,
                                                    info_counts_list$treatment2, 
