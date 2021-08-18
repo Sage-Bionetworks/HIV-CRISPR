@@ -645,16 +645,16 @@ server <- function(input, output, session) {
           output_file_type <- "control_norm.gene_summary.txt"
         }
       })
-      
-      output$compare_plot <- renderPlotly({
+
+      compare_scores_ranks <- reactive({
         
         # get screen names for each selected screen
-        screen1 <- screen_choices()[1]
-        screen2 <- screen_choices()[2]
-       
+        # screen1 <- screen_choices()[1]
+        # screen2 <- screen_choices()[2]
+        
         # set output df names
-        screen1_output_df <- get(paste0(screen1, "_", output_file_type()))
-        screen2_output_df <- get(paste0(screen2, "_", output_file_type()))
+        screen1_output_df <- get(paste0(screen_choices()[1], "_", output_file_type()))
+        screen2_output_df <- get(paste0(screen_choices()[2], "_", output_file_type()))
         
         # only comparing genes in common between the 2 screens
         compare_scores <- screen1_output_df %>% 
@@ -675,15 +675,25 @@ server <- function(input, output, session) {
           pivot_longer(cols = contains("rank"), names_to = "rank_type", values_to = "rank") %>% 
           separate(rank_type, into = c("rank_type", "screen"), sep = "_")
         
+        # join ranks & scores
+        # add key for plotly_click
         compare_scores_ranks <- full_join(compare_scores, compare_ranks, by = c("id", "screen")) %>% 
           filter((str_detect(score_type, "neg") & str_detect(rank_type, "neg")) |
                    (str_detect(score_type, "pos") & str_detect(rank_type, "pos"))) %>% 
           mutate(score_type = str_replace(score_type, "\\|.*$", "")) %>% 
           select(-rank_type) %>% 
-          pivot_wider(names_from = screen, values_from = c(score, rank)) 
+          pivot_wider(names_from = screen, values_from = c(score, rank)) %>% 
+          mutate(key = row.names(.))
         
         # set up key for plotly_click
-        compare_scores_ranks$key <- row.names(compare_scores_ranks)
+       #  compare_scores_ranks$key <- row.names(compare_scores_ranks)
+        
+      })
+            
+      output$compare_plot <- renderPlotly({
+        
+        # make this df non-reactive since reactive seems to generate an error with slice_min 
+        compare_scores_ranks <- compare_scores_ranks()
         
         p8 <- compare_scores_ranks %>% 
           ggplot(aes(x = -log10(score_screen1), y = -log10(score_screen2), 
@@ -695,8 +705,8 @@ server <- function(input, output, session) {
                      shape = 21, size = 3, fill = "turquoise4") +
           geom_point(data = compare_scores_ranks %>% slice_min(rank_screen2, n = 20),
                      shape = 21, size = 3, fill = "turquoise4") +
-          xlab(paste0(screen1, "\n(screen1)")) +
-          ylab(paste0(screen2, "\n(screen2)")) +
+          xlab(paste0(screen_choices()[1], "\n(screen1)")) +
+          ylab(paste0(screen_choices()[2], "\n(screen2)")) +
           ggtitle("Comparison of -log10(score) for 2 screens, with top 20 hits for each highlighted")
         
         ggplotly(p8, source = "compare2_plot",
@@ -712,9 +722,14 @@ server <- function(input, output, session) {
       
       output$gene_all_screens_table <- renderDataTable({
         
-        datatable(event_data(source = "compare2_plot",
-                                 "plotly_click"))
-
+        click_data_key <- event_data(source = "compare2_plot",
+                             "plotly_click") %>% 
+          pull(key)
+        
+        compare_scores_ranks() %>% 
+          filter(key == click_data_key) %>% 
+          datatable()
+        
       })
       
     }
