@@ -19,11 +19,15 @@ names(libraries_raw) <- libraries_raw %>%
   map_chr("name")
 
 # get synNTC lists (txt files without headers)
-libraries_raw %>% 
+# convert to dataframe with library name
+all_ntc_list <- libraries_raw %>% 
   map_chr("path") %>% 
   keep(~ str_detect(.x, "txt")) %>% 
   map(read_lines) %>%
-  list2env(., .GlobalEnv)
+  unlist() %>% 
+  enframe(name = "filename",
+          value = "NTC") %>% 
+  mutate(library_name = word(filename, 1, sep = "_"))
 
 # get the Metascape files (CSVs with "metascape" in filename)
 libraries_raw %>% 

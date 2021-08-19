@@ -41,7 +41,7 @@ ui <- fluidPage(
                  br(),
                  dataTableOutput("all_screens"),
                  hr(),
-                 dataTableOutput("metadata")
+                 dataTableOutput("single_metadata")
                )
              )
              
@@ -298,12 +298,20 @@ server <- function(input, output, session) {
           pull(name)
       })
       
+      # print selected screen in sidebar
       output$show_selected_screen <- renderText({
         selected_screen()
       })
       
-      # screen metadata (from treatment replicate 1)
-      output$metadata <- renderDataTable({
+      # pull library name for eventual use in identifying NTCs
+      library_name <- reactive({
+        metadata %>% 
+          filter(row_number() %in% input$all_screens_rows_selected) %>%  
+          pull(LibraryName)        
+      })
+      
+      # single screen metadata (from treatment replicate 1)
+      output$single_metadata <- renderDataTable({
         
         # get data for specified screen
         get_counts(sample_sheet_id())
@@ -367,7 +375,7 @@ server <- function(input, output, session) {
           pull(id)
       })
       
-      # print list of selected genes
+      # print list of selected genes in sidebar
       # do it multiple times bc you can't reuse same output
       output$selection_info1 <- 
         output$selection_info2 <- 
@@ -378,7 +386,7 @@ server <- function(input, output, session) {
         },
         sep = ", ")
       
-      # QC scatter plot with R2 value
+      # QC scatter plot of count files with R2 values
       output$scatter_r2 <- renderPlotly({
         
         # plot all genes or a subset, based on input
@@ -485,8 +493,12 @@ server <- function(input, output, session) {
       # if ranking top N from all genes
       output$genebar_topn <- renderPlotly({
         
-        ntc_list <- get(paste0(library_name, "_SynNTC_List.txt"))
-        
+        # get collapsed list of NTCs for specific library
+        ntc_list <- all_ntc_list %>% 
+          filter(library_name == library_name()) %>% 
+          pull(NTC) %>% 
+          str_c(collapse = "|")
+
         df_top20 <- df_gene() %>%
           select(id, `neg|score`, `neg|rank`,
                  `pos|rank`, `pos|score`,
@@ -507,7 +519,8 @@ server <- function(input, output, session) {
                            rank_type == "pos|rank" ~ fdr_type == "pos|fdr"))
         
         p3 <- df_top20 %>%
-          mutate(is_ntc = id %in% str_replace(ntc_list, "^.*syn", "syn")) %>% 
+          mutate(is_ntc = case_when(str_detect(ntc_list, id) ~ TRUE,
+                                    TRUE ~ FALSE)) %>% 
           ggplot(aes(y = fct_reorder(id, -rank), x = -log10(score),
                      fill = case_when(input$fillby == "ntc" ~ is_ntc,
                                       input$fillby == "pval" ~ p_value <= 0.01,
@@ -530,7 +543,10 @@ server <- function(input, output, session) {
       
       output$genebar_selected <- renderPlotly({
         
-        ntc_list <- get(paste0(library_name, "_SynNTC_List.txt"))
+        ntc_list <- all_ntc_list %>% 
+          filter(library_name == library_name()) %>% 
+          pull(NTC) %>% 
+          str_c(collapse = "|")
         
         df_gene_selected <-  df_gene() %>% 
           filter(id %in% genes_from_table()) %>% 
@@ -554,7 +570,8 @@ server <- function(input, output, session) {
         p4 <- df_gene_selected %>%
           mutate(rank_type = as.factor(rank_type),
                  id2 = reorder_within(as.factor(id), -rank, rank_type),
-                 is_ntc = id %in% str_replace(ntc_list, "^.*syn", "syn")) %>% 
+                 is_ntc = case_when(str_detect(ntc_list, id) ~ TRUE,
+                                    TRUE ~ FALSE)) %>% 
           ggplot(aes(y = id2, x = -log10(score),
                      fill = case_when(input$fillby == "ntc" ~ is_ntc,
                                       input$fillby == "pval" ~ p_value <= 0.01,
@@ -577,11 +594,14 @@ server <- function(input, output, session) {
       
       output$dotplot <- renderPlotly({
         
-        ntc_list <- get(paste0(library_name, "_SynNTC_List.txt"))
+        ntc_list <- all_ntc_list %>% 
+          filter(library_name == library_name()) %>% 
+          pull(NTC) %>% 
+          str_c(collapse = "|")
         
-        # only works for NTC lists where NTCs are named like XXXXX_synNTC_YYY
         df_gene_is_ntc <- df_gene() %>% 
-          mutate(is_ntc = id %in% str_replace(ntc_list, "^.*syn", "syn"))
+          mutate(is_ntc = case_when(str_detect(ntc_list, id) ~ TRUE,
+                                    TRUE ~ FALSE))
         
         median_neg_ntc <- df_gene_is_ntc %>% 
           filter(is_ntc == TRUE) %>% 
