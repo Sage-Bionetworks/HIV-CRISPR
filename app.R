@@ -645,7 +645,7 @@ server <- function(input, output, session) {
           output_file_type <- "control_norm.gene_summary.txt"
         }
       })
-
+      
       compare_scores_ranks <- reactive({
         
         # get screen names for each selected screen
@@ -686,10 +686,10 @@ server <- function(input, output, session) {
           mutate(key = row.names(.))
         
         # set up key for plotly_click
-       #  compare_scores_ranks$key <- row.names(compare_scores_ranks)
+        #  compare_scores_ranks$key <- row.names(compare_scores_ranks)
         
       })
-            
+      
       output$compare_plot <- renderPlotly({
         
         # make this df non-reactive since reactive seems to generate an error with slice_min 
@@ -715,19 +715,23 @@ server <- function(input, output, session) {
         
       })
       
-      # selected_gene <- reactive({
-      #   event_data("plotly_click",
-      #              source = "compare2_plot")
-      # })
-      
       output$gene_all_screens_table <- renderDataTable({
         
+        # get gene name for clicked point
         click_data_key <- event_data(source = "compare2_plot",
-                             "plotly_click") %>% 
+                                     "plotly_click") %>% 
           pull(key)
         
-        compare_scores_ranks() %>% 
+        click_gene <- compare_scores_ranks() %>% 
           filter(key == click_data_key) %>% 
+          pull(id)
+        
+        # get all-screens joined dataset
+        # and filter by gene name
+        all_screens_output_df <- get(paste0(output_file_type(), "_joined"))
+        
+        all_screens_output_df %>% 
+          filter(id == click_gene) %>% 
           datatable()
         
       })

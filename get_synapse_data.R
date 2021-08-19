@@ -79,11 +79,16 @@ get_screen_data <- function(folder_id){
 }
 
 # run above function for all screens
-
 metadata %>% 
   pull(id) %>% 
   map(get_screen_data) 
 
+# join the median/control_norm.gene_summary files for cross-screens comparison
+median_norm.gene_summary.txt_joined <- as.list(mget(ls(pattern = "median_norm.gene_summary.txt$"))) %>% 
+bind_rows(.id = "filename")
+
+control_norm.gene_summary.txt_joined <- as.list(mget(ls(pattern = "control_norm.gene_summary.txt$"))) %>% 
+  bind_rows(.id = "filename")
 
 ## GET COUNT FILES FOR SINGLE SCREEN
 
