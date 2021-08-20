@@ -43,8 +43,7 @@ ui <- fluidPage(
                                              "control_norm.gene_summary" = "control_norm"),
                               selected = "median_norm"),
                  actionButton("clear", "Clear selections"),
-                 br(),
-                 br(),
+                 br(), br(),
                  wellPanel(
                    p("Selected genes: ", 
                      textOutput("selection_info1", inline = TRUE))
@@ -254,7 +253,7 @@ server <- function(input, output, session) {
       # Load data from Synapse
       source("get_synapse_data.R")
       
-      # Show metadata for all screens that have a configId
+      # Show metadata for all screens with ACCEPTED yaml file
       output$all_screens <- renderDataTable({
         metadata %>% 
           datatable(rownames = FALSE,
@@ -268,24 +267,24 @@ server <- function(input, output, session) {
                     selection = list(mode = "single")) 
       })
       
-      # get synID for chosen screen
+      # get synID for selected screen
       sample_sheet_id <- reactive({
         metadata %>% 
           filter(row_number() %in% input$all_screens_rows_selected) %>%  
           pull(configId)
       })
       
-      # get selected screen id and then print (separate bc need to use selected_screen again later)
+      # get name of selected screen
       selected_screen <- reactive({
         metadata %>% 
           filter(row_number() %in% input$all_screens_rows_selected) %>%  
           pull(name)
       })
       
-      # print selected screen in sidebar
-      output$show_selected_screen <- renderText({
-        selected_screen()
-      })
+      # # print selected screen in sidebar
+      # output$show_selected_screen <- renderText({
+      #   selected_screen()
+      # })
       
       # pull library name for eventual use in identifying NTCs
       library_name <- reactive({
@@ -294,21 +293,21 @@ server <- function(input, output, session) {
           pull(LibraryName)        
       })
       
-      # single screen metadata (from treatment replicate 1)
-      output$single_metadata <- renderDataTable({
-        
-        # get data for specified screen
-        get_counts(sample_sheet_id())
-        
-        metadata %>% 
-          filter(configId == sample_sheet_id()) %>%
-          select(-starts_with("ROW_")) %>% 
-          pivot_longer(cols = everything(),
-                       names_to = "field", values_to = "value",
-                       values_transform = list(value = as.character)) %>% 
-          datatable(caption = paste0("Metadata for screen ", screen_name, ", pulled from treatment replicate 1"),
-                    rownames = FALSE)
-      })
+      # # single screen metadata (from treatment replicate 1)
+      # output$single_metadata <- renderDataTable({
+      #   
+      #   # get data for specified screen
+      #   get_counts(sample_sheet_id())
+      #   
+      #   metadata %>% 
+      #     filter(configId == sample_sheet_id()) %>%
+      #     select(-starts_with("ROW_")) %>% 
+      #     pivot_longer(cols = everything(),
+      #                  names_to = "field", values_to = "value",
+      #                  values_transform = list(value = as.character)) %>% 
+      #     datatable(caption = paste0("Metadata for screen ", screen_name, ", pulled from treatment replicate 1"),
+      #               rownames = FALSE)
+      # })
       
       # choose dataset for Data tab
       df_gene <- reactive({
@@ -373,6 +372,9 @@ server <- function(input, output, session) {
       
       # QC scatter plot of count files with R2 values
       output$scatter_r2 <- renderPlotly({
+        
+        # get count files for selected screen
+        get_counts(sample_sheet_id())
         
         # plot all genes or a subset, based on input
         treatment_joined <- if (input$selectall_qc == TRUE) {
