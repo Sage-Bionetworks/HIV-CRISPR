@@ -17,16 +17,20 @@ ui <- fluidPage(
     )
   ),
   
-  titlePanel("HIV-CRISPR data viz demo (CUL3 library only)"),
+  titlePanel("HIV-CRISPR Screen Data Visualization"),
   
   uiOutput("title"),
   
   tabsetPanel(
-    tabPanel("Metadata",
+    tabPanel("Single screen data",
              sidebarLayout(
                sidebarPanel(
-                 helpText("This table shows metadata for all screens. 
-                        Select a screen to use in the next 5 tabs.",
+                 helpText("Top table shows metadata for all available screens. 
+                        Select a screen to visualize.",
+                        br(), br(),
+                        "Bottom table shows gene summary output data
+                        (median or control normalized) for selected screen. 
+                        Select one or more genes to visualize.",
                         br(), br(),
                         "Drag columns to reorder, 
                         or click 'Column visibility' to show/hide columns. 
@@ -34,31 +38,7 @@ ui <- fluidPage(
                         Selected genes will be listed below. 
                         Search box accepts regular expressions (ie. use '|' for OR).",
                         br(), br()),
-                 p("Selected screen: ",
-                   textOutput("show_selected_screen", inline = TRUE))
-               ),
-               mainPanel(
-                 br(),
-                 dataTableOutput("all_screens"),
-                 hr(),
-                 dataTableOutput("single_metadata")
-               )
-             )
-             
-    ),
-    tabPanel("Output data",
-             sidebarLayout(
-               sidebarPanel(
-                 helpText("This table shows output data for the selected screen. 
-                        Select genes to plot in the next 3 tabs.",
-                        br(), br(),
-                        "Drag columns to reorder, 
-                          or click 'Column visibility' to show/hide columns. 
-                          Click to select multiple rows for plotting. 
-                          Selected genes will be listed below. 
-                          Search box accepts regular expressions (ie. use '|' for OR).",
-                        br(), br()),
-                 radioButtons("showdata", "Select output files to show:",
+                 radioButtons("showdata", "Select output type to show:",
                               choices = list("median_norm.gene_summary" = "median_norm",
                                              "control_norm.gene_summary" = "control_norm"),
                               selected = "median_norm"),
@@ -72,6 +52,10 @@ ui <- fluidPage(
                ),
                mainPanel(
                  br(),
+                 h4("Metadata for all available screens"),
+                 dataTableOutput("all_screens"),
+                 br(), hr(), br(),
+                 h4("Output data for selected screen"),
                  dataTableOutput("comp_data_table")
                )
              )
@@ -162,7 +146,7 @@ ui <- fluidPage(
              )
              
     ),
-    tabPanel("Dot Plot",
+    tabPanel("Dot plot",
              sidebarLayout(
                sidebarPanel(
                  helpText("This plot only works with median_norm.gene_summary.txt")
@@ -354,7 +338,8 @@ server <- function(input, output, session) {
                                  dom = "Bfrtip",
                                  buttons = I("colvis"),
                                  colReorder = list(realtime = FALSE)),
-                  caption = paste0(input$showdata, ".gene_summary"),
+                  caption = paste0(input$showdata, ".gene_summary for ", 
+                                   selected_screen()),
                   escape = FALSE
         )
         
@@ -498,7 +483,7 @@ server <- function(input, output, session) {
           filter(library_name == library_name()) %>% 
           pull(NTC) %>% 
           str_c(collapse = "|")
-
+        
         df_top20 <- df_gene() %>%
           select(id, `neg|score`, `neg|rank`,
                  `pos|rank`, `pos|score`,
