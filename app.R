@@ -19,13 +19,15 @@ ui <- fluidPage(
   
   titlePanel("HIV-CRISPR Screen Data Visualization"),
   
-  uiOutput("title"),
+  #uiOutput("title"),
   
   tabsetPanel(
     tabPanel("Single screen data",
              sidebarLayout(
                sidebarPanel(
-                 helpText("Top table shows metadata for all available screens. 
+                 helpText("Note: May take a moment to load",
+                          br(), br(),
+                          "Top table shows metadata for all available screens. 
                         Select a screen to visualize.",
                         br(), br(),
                         "Bottom table shows gene summary output data
@@ -64,7 +66,9 @@ ui <- fluidPage(
              sidebarLayout(
                sidebarPanel(
                  br(),
-                 helpText("Uncheck the box to use gene selection from Data tab."),
+                 helpText("Note: May take a moment to load",
+                          br(), br(),
+                          "Uncheck the box to use gene selection from Data tab."),
                  checkboxInput("selectall_qc", "Plot all sgRNAs", value = TRUE),
                  br(),
                  conditionalPanel(
@@ -85,8 +89,7 @@ ui <- fluidPage(
              sidebarLayout(
                sidebarPanel(
                  helpText("Use the Data tab to select genes to plot. 
-                          Vertical lines indicate median of group. 
-                          (Error message means you haven't selected anything from the Data tab.)"),
+                          Vertical lines indicate median of group."),
                  br(),
                  wellPanel(
                    p("Selected genes: ", 
@@ -108,7 +111,8 @@ ui <- fluidPage(
              sidebarLayout(
                sidebarPanel(
                  br(),
-                 helpText("Uncheck the box to use gene selection from Data tab."),
+                 helpText("Uncheck the box to use gene selection from Data tab. 
+                          (Error message means you haven't selected anything from the Data tab.)"),
                  checkboxInput("selectall_bar", "Rank all genes", value = TRUE),
                  br(),
                  # show selected genes if "rank all genes" is unchecked
@@ -159,6 +163,8 @@ ui <- fluidPage(
     tabPanel("Compare 2 Screens",
              sidebarLayout(
                sidebarPanel(
+                 helpText("Top table shows metadata for all available screens. 
+                        Select 2 screens to compare."),
                  p("Selected screens: ",
                    br(),
                    htmlOutput("selected_2_screens", inline = TRUE)),
@@ -169,9 +175,13 @@ ui <- fluidPage(
                ),
                mainPanel(
                  br(),
+                 h4("Metadata for all available screens"),
+                 br(),
                  dataTableOutput("all_screens_2"),
                  hr(),
                  plotlyOutput("compare_plot"),
+                 br(), hr(),
+                 h4("Data for selected gene across all screens"),
                  br(),
                  dataTableOutput("gene_all_screens_table")
                )
@@ -281,33 +291,12 @@ server <- function(input, output, session) {
           pull(name)
       })
       
-      # # print selected screen in sidebar
-      # output$show_selected_screen <- renderText({
-      #   selected_screen()
-      # })
-      
       # pull library name for eventual use in identifying NTCs
       library_name <- reactive({
         metadata %>% 
           filter(row_number() %in% input$all_screens_rows_selected) %>%  
           pull(LibraryName)        
       })
-      
-      # # single screen metadata (from treatment replicate 1)
-      # output$single_metadata <- renderDataTable({
-      #   
-      #   # get data for specified screen
-      #   get_counts(sample_sheet_id())
-      #   
-      #   metadata %>% 
-      #     filter(configId == sample_sheet_id()) %>%
-      #     select(-starts_with("ROW_")) %>% 
-      #     pivot_longer(cols = everything(),
-      #                  names_to = "field", values_to = "value",
-      #                  values_transform = list(value = as.character)) %>% 
-      #     datatable(caption = paste0("Metadata for screen ", screen_name, ", pulled from treatment replicate 1"),
-      #               rownames = FALSE)
-      # })
       
       # choose dataset for Data tab
       df_gene <- reactive({
@@ -320,6 +309,9 @@ server <- function(input, output, session) {
       
       # show data for single screen
       output$comp_data_table <- renderDataTable({
+        
+        # suppress error message that shows when nothing is selected 
+        req(input$all_screens_rows_selected)
         
         # bring in GeneCards links
         # don't replace gene id with link - there are a few differences between `MyList` and `Gene Symbol`
@@ -366,6 +358,10 @@ server <- function(input, output, session) {
         output$selection_info3 <-
         output$selection_info4 <-
         renderText({
+          
+          # suppress error message if nothing selected
+          req(input$comp_data_table_rows_selected)
+          
           genes_from_table()
         },
         sep = ", ")
@@ -453,6 +449,9 @@ server <- function(input, output, session) {
       
       # scatter plot of individual sgRNAs for each gene
       output$scatter_sgrna <- renderPlotly({
+        
+        # suppress error message that shows if no genes selected
+        req(input$comp_data_table_rows_selected)
         
         p5 <- df_sgRNA() %>% 
           filter(Gene %in% genes_from_table()) %>% 
@@ -629,7 +628,14 @@ server <- function(input, output, session) {
       # show all screens again, this time with multiple selection
       output$all_screens_2 <- renderDataTable({
         metadata %>% 
-          datatable(rownames = FALSE) 
+          datatable(rownames = FALSE,
+                    filter = "top",
+                    extensions = c("Buttons", "ColReorder"),
+                    options = list(search = list(regex = TRUE),
+                                   dom = "Bfrtip",
+                                   buttons = I("colvis"),
+                                   colReorder = list(realtime = FALSE)),
+                    escape = FALSE) 
       })
       
       # get screen names from selected datatable rows
@@ -699,6 +705,9 @@ server <- function(input, output, session) {
       
       output$compare_plot <- renderPlotly({
         
+        # suppress error message if nothing selected
+        req(input$all_screens_2_rows_selected)
+        
         # make this df non-reactive since reactive seems to generate an error with slice_min 
         compare_scores_ranks <- compare_scores_ranks()
         
@@ -739,7 +748,14 @@ server <- function(input, output, session) {
         
         all_screens_output_df %>% 
           filter(id == click_gene) %>% 
-          datatable()
+          datatable(rownames = FALSE,
+                    filter = "top",
+                    extensions = c("Buttons", "ColReorder"),
+                    options = list(search = list(regex = TRUE),
+                                   dom = "Bfrtip",
+                                   buttons = I("colvis"),
+                                   colReorder = list(realtime = FALSE)),
+                    escape = FALSE)
         
       })
       
