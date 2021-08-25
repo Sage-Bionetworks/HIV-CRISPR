@@ -66,7 +66,7 @@ ui <- fluidPage(
              sidebarLayout(
                sidebarPanel(
                  br(),
-                 helpText("Note: May take a moment to load",
+                 helpText("Note: May take a moment to load after selecting a new dataset",
                           br(), br(),
                           "Uncheck the box to use gene selection from Data tab."),
                  checkboxInput("selectall_qc", "Plot all sgRNAs", value = TRUE),
@@ -80,6 +80,8 @@ ui <- fluidPage(
                ),
                mainPanel(
                  br(),
+                 h4("Correlation between treatment (left) and control (right) 
+                    replicate count files"),
                  plotlyOutput("scatter_r2")
                )
              )
@@ -89,7 +91,7 @@ ui <- fluidPage(
              sidebarLayout(
                sidebarPanel(
                  helpText("Use the Data tab to select genes to plot. 
-                          Vertical lines indicate median of group."),
+                          Horizontal bar indicates median of group."),
                  br(),
                  wellPanel(
                    p("Selected genes: ", 
@@ -102,6 +104,8 @@ ui <- fluidPage(
                  
                ),
                mainPanel(
+                 br(),
+                 h4("Individual sgRNA results for selected genes"),
                  plotlyOutput("scatter_sgrna")
                )
              )
@@ -136,6 +140,7 @@ ui <- fluidPage(
                               selected = "ntc")
                ),
                mainPanel(
+                 h4("Negative (left) and positive (right) gene scores"),
                  conditionalPanel(
                    condition = "input.selectall_bar == 0",
                    plotlyOutput("genebar_selected")
@@ -152,9 +157,12 @@ ui <- fluidPage(
     tabPanel("Dot plot",
              sidebarLayout(
                sidebarPanel(
-                 helpText("This plot only works with median_norm.gene_summary.txt")
+                 helpText("Note: This plot only works with median_norm.gene_summary.txt")
                ),
                mainPanel(
+                 h4("Log fold change from NTC median for all genes in selected screen"),
+                 h5("Log fold change for positive scores 
+                    is arbitrarily shown below 0 for plotting purposes"),
                  plotlyOutput("dotplot")
                )
              )
@@ -179,6 +187,8 @@ ui <- fluidPage(
                  br(),
                  dataTableOutput("all_screens_2"),
                  hr(),
+                 h4("Comparison of negative (left) and positive (right) 
+                    -log10(score) for 2 selected screens"),
                  plotlyOutput("compare_plot"),
                  br(), hr(),
                  h4("Data for selected gene across all screens"),
@@ -369,6 +379,9 @@ server <- function(input, output, session) {
       # QC scatter plot of count files with R2 values
       output$scatter_r2 <- renderPlotly({
         
+        # suppress error message if nothing selected
+        req(input$all_screens_rows_selected)
+        
         # get count files for selected screen
         get_counts(sample_sheet_id())
         
@@ -432,9 +445,7 @@ server <- function(input, output, session) {
         # put the two plots together
         subplot(fig1, fig2,
                 titleX = TRUE,
-                titleY = TRUE) %>% 
-          layout(title = "Counts in treatment (left) and control (right) replicates",
-                 margin = list(t = 50))
+                titleY = TRUE)
       })
       
       
@@ -456,19 +467,16 @@ server <- function(input, output, session) {
         p5 <- df_sgRNA() %>% 
           filter(Gene %in% genes_from_table()) %>% 
           ggplot(aes_string(x = "Gene", y = input$sgrna_y)) +
-          # geom_boxplot(outlier.shape = NA) +
           geom_jitter(aes(group = Gene, sgRNA = sgrna, fill = Gene),
                       width = 0.1, alpha = 0.6, shape = 21) +
           stat_summary(aes(group = Gene),
                        fun = median, geom = "crossbar",
                        width = 0.5) +
-          # coord_flip() +
           scale_fill_viridis_d() +
           theme(legend.position = "none",
                 axis.text.x = element_text(angle = 45, hjust = 1)) +
-          xlab(NULL) +
-          ggtitle("Individual sgRNA scores for selected genes")
-        
+          xlab(NULL) 
+
         ggplotly(p5, tooltip = c("sgRNA", "y"))
         
       })
@@ -478,6 +486,9 @@ server <- function(input, output, session) {
       
       # if ranking top N from all genes
       output$genebar_topn <- renderPlotly({
+        
+        # suppress error message if nothing selected
+        req(input$all_screens_rows_selected)
         
         # get collapsed list of NTCs for specific library
         ntc_list <- all_ntc_list %>% 
@@ -520,14 +531,16 @@ server <- function(input, output, session) {
                                              input$fillby == "pval" ~ "p <= 0.01",
                                              input$fillby == "fdr" ~ "FDR <= 0.05")) +
           ylab(NULL) +
-          xlab("-log10 MAGeCK gene score") +
-          ggtitle(paste0("Top ", input$topn, " highest-ranked genes in ", input$showdata, ".gene_summary"))
-        
+          xlab("-log10 MAGeCK gene score")
+
         ggplotly(p3, tooltip = c("rank", "score", "p", "fdr"))
         
       })  
       
       output$genebar_selected <- renderPlotly({
+        
+        # suppress error message if nothing selected
+        req(input$all_screens_rows_selected)
         
         ntc_list <- all_ntc_list %>% 
           filter(library_name == library_name()) %>% 
@@ -571,14 +584,16 @@ server <- function(input, output, session) {
                                              input$fillby == "pval" ~ "p <= 0.01",
                                              input$fillby == "fdr" ~ "FDR <= 0.05")) +
           ylab(NULL) +
-          xlab("-log10 MAGeCK gene score") +
-          ggtitle(paste0("Selected genes from ", input$showdata, ".gene_summary, by pos or neg rank"))
+          xlab("-log10 MAGeCK gene score") 
         
         ggplotly(p4, tooltip = c("rank", "score", "p", "fdr"))
         
       })
       
       output$dotplot <- renderPlotly({
+        
+        # suppress error message if nothing selected
+        req(input$all_screens_rows_selected)
         
         ntc_list <- all_ntc_list %>% 
           filter(library_name == library_name()) %>% 
@@ -617,7 +632,8 @@ server <- function(input, output, session) {
                      show.legend = FALSE) +
           scale_fill_brewer(palette = "Dark2") +
           theme(axis.text.x = element_blank(),
-                axis.ticks.x = element_blank()) +
+                axis.ticks.x = element_blank(),
+                legend.title = element_blank()) +
           xlab("Genes") +
           ylab("Log10 fold change from NTC median")
         
@@ -661,10 +677,6 @@ server <- function(input, output, session) {
       
       compare_scores_ranks <- reactive({
         
-        # get screen names for each selected screen
-        # screen1 <- screen_choices()[1]
-        # screen2 <- screen_choices()[2]
-        
         # set output df names
         screen1_output_df <- get(paste0(screen_choices()[1], "_", output_file_type()))
         screen2_output_df <- get(paste0(screen_choices()[2], "_", output_file_type()))
@@ -698,9 +710,6 @@ server <- function(input, output, session) {
           pivot_wider(names_from = screen, values_from = c(score, rank)) %>% 
           mutate(key = row.names(.))
         
-        # set up key for plotly_click
-        #  compare_scores_ranks$key <- row.names(compare_scores_ranks)
-        
       })
       
       output$compare_plot <- renderPlotly({
@@ -722,8 +731,7 @@ server <- function(input, output, session) {
           geom_point(data = compare_scores_ranks %>% slice_min(rank_screen2, n = 20),
                      shape = 21, size = 3, fill = "turquoise4") +
           xlab(paste0(screen_choices()[1], "\n(screen1)")) +
-          ylab(paste0(screen_choices()[2], "\n(screen2)")) +
-          ggtitle("Comparison of -log10(score) for 2 screens, with top 20 hits for each highlighted")
+          ylab(paste0(screen_choices()[2], "\n(screen2)")) 
         
         ggplotly(p8, source = "compare2_plot",
                  tooltip = c("id", "x", "y", "rank_screen1", "rank_screen2")) %>% 
@@ -732,6 +740,10 @@ server <- function(input, output, session) {
       })
       
       output$gene_all_screens_table <- renderDataTable({
+        
+        #suppress error message
+        req(event_data(source = "compare2_plot",
+                       "plotly_click"))
         
         # get gene name for clicked point
         click_data_key <- event_data(source = "compare2_plot",
