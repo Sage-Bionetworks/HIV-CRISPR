@@ -67,7 +67,7 @@ metadata <- metadata %>%
 
 ## GET OUTPUT DATA FOR ALL SCREENS
 
-# function to get data for one screen
+# function to get output data for one screen
 
 get_screen_data <- function(folder_id){
   

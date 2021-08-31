@@ -157,12 +157,12 @@ ui <- fluidPage(
     tabPanel("Dot plot",
              sidebarLayout(
                sidebarPanel(
-                 helpText("Note: This plot only works with median_norm.gene_summary.txt")
+                 helpText("Note: This plot only works with median_norm.gene_summary.txt. 
+                          Log fold change for positive scores 
+                          is arbitrarily shown below 0 for plotting purposes. NTCs are shown in white.")
                ),
                mainPanel(
                  h4("Log fold change from NTC median for all genes in selected screen"),
-                 h5("Log fold change for positive scores 
-                    is arbitrarily shown below 0 for plotting purposes"),
                  plotlyOutput("dotplot")
                )
              )
@@ -173,9 +173,13 @@ ui <- fluidPage(
                sidebarPanel(
                  helpText("Top table shows metadata for all available screens. 
                         Select 2 screens to compare."),
+                 helpText("NTCs will only be shown when 
+                          comparing two screens with the same library."),
+                 br(),
                  p("Selected screens: ",
                    br(),
                    htmlOutput("selected_2_screens", inline = TRUE)),
+                 br(),
                  radioButtons("norm_type", "Select output files to use:",
                               choices = list("median_norm.gene_summary" = "median_norm",
                                              "control_norm.gene_summary" = "control_norm"),
@@ -476,7 +480,7 @@ server <- function(input, output, session) {
           theme(legend.position = "none",
                 axis.text.x = element_text(angle = 45, hjust = 1)) +
           xlab(NULL) 
-
+        
         ggplotly(p5, tooltip = c("sgRNA", "y"))
         
       })
@@ -532,7 +536,7 @@ server <- function(input, output, session) {
                                              input$fillby == "fdr" ~ "FDR <= 0.05")) +
           ylab(NULL) +
           xlab("-log10 MAGeCK gene score")
-
+        
         ggplotly(p3, tooltip = c("rank", "score", "p", "fdr"))
         
       })  
@@ -626,10 +630,9 @@ server <- function(input, output, session) {
           ggplot(aes(x = fct_shuffle(as.factor(id)),
                      y = change_value, 
                      fill = change_type, text = id)) +
-          geom_point(shape = 21, alpha = 0.8, size = 2) +
+          geom_point(shape = 21, alpha = 0.6, size = 2) +
           geom_point(data = . %>% filter(is_ntc == TRUE),
-                     shape = 21, fill = "white", size = 2, 
-                     show.legend = FALSE) +
+                     fill = "white", shape = 21, size = 2) +
           scale_fill_brewer(palette = "Dark2") +
           theme(axis.text.x = element_blank(),
                 axis.ticks.x = element_blank(),
@@ -661,7 +664,14 @@ server <- function(input, output, session) {
           pull(name)
       })
       
-      # print selected screen names
+      # get library names from selected datatable rows
+      library_choices <- reactive({
+        metadata %>% 
+          filter(row_number() %in% input$all_screens_2_rows_selected) %>% 
+          pull(LibraryName)
+      })
+      
+      # print selected screen names in sidebar
       output$selected_2_screens <- renderText({
         HTML(paste(screen_choices()[1], screen_choices()[2], sep = "<br>"))
       })
@@ -677,9 +687,38 @@ server <- function(input, output, session) {
       
       compare_scores_ranks <- reactive({
         
+        # get NTC list for each screen's library
+        ntc_list_screen1 <- all_ntc_list %>% 
+          filter(library_name == library_choices()[1]) %>% 
+          pull(NTC) %>% 
+          str_c(collapse = "|")
+        
+        ntc_list_screen2 <- all_ntc_list %>% 
+          filter(library_name == library_choices()[2]) %>% 
+          pull(NTC) %>% 
+          str_c(collapse = "|")
+        
         # set output df names
-        screen1_output_df <- get(paste0(screen_choices()[1], "_", output_file_type()))
-        screen2_output_df <- get(paste0(screen_choices()[2], "_", output_file_type()))
+        # and add is_ntc column
+        screen1_output_df <- get(paste0(screen_choices()[1], "_", output_file_type())) %>% 
+          mutate(is_ntc = case_when(str_detect(ntc_list_screen1, id) ~ TRUE,
+                                    TRUE ~ FALSE))
+        
+        screen2_output_df <- get(paste0(screen_choices()[2], "_", output_file_type())) %>% 
+          mutate(is_ntc = case_when(str_detect(ntc_list_screen2, id) ~ TRUE,
+                                    TRUE ~ FALSE))
+        
+        # if libraries from both screens are different, remove all NTCs
+        # if libraries are same, include NTCs
+        if (library_choices()[1] != library_choices()[2]){
+          
+          screen1_output_df <- screen1_output_df %>% 
+            filter(is_ntc == FALSE)
+          
+          screen2_output_df <- screen2_output_df %>% 
+            filter(is_ntc == FALSE)
+          
+        }
         
         # only comparing genes in common between the 2 screens
         compare_scores <- screen1_output_df %>% 
@@ -720,16 +759,13 @@ server <- function(input, output, session) {
         # make this df non-reactive since reactive seems to generate an error with slice_min 
         compare_scores_ranks <- compare_scores_ranks()
         
+        
         p8 <- compare_scores_ranks %>% 
           ggplot(aes(x = -log10(score_screen1), y = -log10(score_screen2), 
                      id = id, key = key, rank_screen1 = rank_screen1, rank_screen2 = rank_screen2)) +
-          geom_point(shape = 21, alpha = 0.5) +
+          geom_point(shape = 21, alpha = 0.5, size = 2) +
           geom_abline(slope = 1) +
           facet_wrap(~score_type, scales = "free") +
-          geom_point(data = compare_scores_ranks %>% slice_min(rank_screen1, n = 20),
-                     shape = 21, size = 3, fill = "turquoise4") +
-          geom_point(data = compare_scores_ranks %>% slice_min(rank_screen2, n = 20),
-                     shape = 21, size = 3, fill = "turquoise4") +
           xlab(paste0(screen_choices()[1], "\n(screen1)")) +
           ylab(paste0(screen_choices()[2], "\n(screen2)")) 
         
