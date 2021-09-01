@@ -858,7 +858,7 @@ server <- function(input, output, session) {
                      id = id, key = key, 
                      rank_screen1 = rank_screen1, rank_screen2 = rank_screen2)) +
           geom_point(shape = 21, alpha = 0.5, size = 2) +
-          geom_abline(slope = 1) +
+          geom_abline(slope = 1, linetype = "dashed") +
           facet_wrap(~score_type, scales = "free") +
           xlab(paste0("\n", screen_choices()[1], "(screen1)")) +
           ylab(paste0(screen_choices()[2], "\n(screen2)")) 
