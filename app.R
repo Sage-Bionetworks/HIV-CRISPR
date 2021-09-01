@@ -25,7 +25,7 @@ ui <- fluidPage(
   # TITLE PANEL
   titlePanel("HIV-CRISPR Screen Data Visualization"),
   
-  ##========================================================================================
+  ##======================================================================================
   
   # SINGLE SCREEN DATA TAB
   # Display metadata for all screens and output data for 1 selected screen
@@ -69,10 +69,9 @@ ui <- fluidPage(
                  dataTableOutput("comp_data_table")
                )
              )
-             
     ),
     
-    ##========================================================================================    
+    ##====================================================================================    
     
     # QC TAB
     # Plot treatment & control count files for selected screen
@@ -100,10 +99,9 @@ ui <- fluidPage(
                  plotlyOutput("scatter_r2")
                )
              )
-             
     ),
     
-    ##========================================================================================
+    ##====================================================================================
     
     # INDIVIDUAL sgRNAs TAB
     # Plot sgRNA_summary data for selected genes
@@ -129,10 +127,9 @@ ui <- fluidPage(
                  plotlyOutput("scatter_sgrna")
                )
              )
-             
     ),
     
-    ##========================================================================================
+    ##====================================================================================
     
     # RANKED GENE SUMMARY TAB
     # Plot neg & pos gene scores, ordered by rank
@@ -162,28 +159,31 @@ ui <- fluidPage(
                                min = 1, max = 50, value = 20)
                  ),
                  radioButtons("fillby", "Fill bars by:",
-                              choices = list("gene in NTC list" = "ntc",
-                                             "p <= 0.01" = "pval",
-                                             "fdr <= 0.05" = "fdr"),
-                              selected = "ntc")
+                              choices = list(
+                                #"gene in NTC list" = "ntc",
+                                             "p-value" = "pval",
+                                             "FDR" = "fdr"),
+                              selected = "pval"),
+                 sliderInput("threshold", "Select threshold:",
+                             min = 0, max = 1, value = 0.05, step = 0.01)
                ),
                mainPanel(
                  h4("Negative (left) and positive (right) gene scores"),
+                 # show genebar_selected plot if "rank all genes" is unchecked
                  conditionalPanel(
                    condition = "input.selectall_bar == 0",
                    plotlyOutput("genebar_selected")
                  ),
+                 # show genebar_topn plot if "rank all genes" is checked
                  conditionalPanel(
                    condition = "input.selectall_bar == 1",
                    plotlyOutput("genebar_topn")
                  )
-                 
                )
              )
-             
     ),
     
-    ##========================================================================================
+    ##====================================================================================
     
     # DOT PLOT TAB
     # Plot all genes from selected screen - NTCs in white
@@ -200,10 +200,9 @@ ui <- fluidPage(
                  plotlyOutput("dotplot")
                )
              )
-             
     ),
     
-    ##========================================================================================
+    ##====================================================================================
     
     # COMPARE 2 SCREENS TAB
     # Select 2 screens
@@ -242,11 +241,10 @@ ui <- fluidPage(
                  dataTableOutput("gene_all_screens_table")
                )
              )
-             
     )
   ),
   
-  ##========================================================================================
+  ##======================================================================================
   
   # more Synapse template stuff
   # make sure this is outside the tabSetPanel
@@ -258,7 +256,6 @@ ui <- fluidPage(
     ),
     color = "#424874"
   )
-  
 )
 
 
@@ -312,17 +309,15 @@ server <- function(input, output, session) {
             )
           )
         )
-        
       })
       
       # Any shiny app functionality that uses Synapse should be within the
       # input$cookie observer (so basically everything)
       output$title <- renderUI({
         titlePanel(sprintf("Welcome, %s", synGetUserProfile()$userName))
-        
       })
       
-      ##========================================================================================      
+      ##==================================================================================    
       
       # SINGLE SCREEN DATA TAB
       
@@ -399,7 +394,6 @@ server <- function(input, output, session) {
                                    selected_screen()),
                   escape = FALSE
         )
-        
       }) 
       
       # set up proxy for "Clear Selections" button
@@ -432,7 +426,7 @@ server <- function(input, output, session) {
         },
         sep = ", ")
       
-      ##========================================================================================      
+      ##==================================================================================     
       
       # QC TAB
       
@@ -508,7 +502,7 @@ server <- function(input, output, session) {
                 titleY = TRUE)
       })
       
-      ##========================================================================================     
+      ##==================================================================================  
       
       # INDIVIDUAL sgRNAs TAB
       
@@ -544,11 +538,16 @@ server <- function(input, output, session) {
         
       })
       
-      ##========================================================================================      
+      ##==================================================================================     
       
       # RANKED GENE SUMMARY TAB
       
       ## Two different plots for ranked gene summary: genebar_topn, genebar_selected
+      
+      # NOTE: Originally there was also an option to filter by "is_ntc"
+      # I took out that option to facilitate using a single slider for p/fdr
+      # but left in the code for looking up genes in NTC list 
+      # in case anyone wants to add that option back later
       
       # if ranking top N from all genes
       output$genebar_topn <- renderPlotly({
@@ -589,17 +588,24 @@ server <- function(input, output, session) {
           mutate(is_ntc = case_when(str_detect(ntc_list, id) ~ TRUE,
                                     TRUE ~ FALSE)) %>% 
           ggplot(aes(y = fct_reorder(id, -rank), x = -log10(score),
-                     fill = case_when(input$fillby == "ntc" ~ is_ntc,
-                                      input$fillby == "pval" ~ p_value <= 0.01,
-                                      input$fillby == "fdr" ~ fdr <= 0.05),
+                     fill = case_when(
+                       #input$fillby == "ntc" ~ is_ntc,
+                       input$fillby == "pval" ~ p_value <= input$threshold,
+                       input$fillby == "fdr" ~ fdr <= input$threshold
+                     ),
                      rank = rank, score = score, p = p_value, fdr = fdr)) +
           geom_col() +
           facet_wrap(~rank_type, scales = "free_y") +
           scale_y_reordered() +
-          scale_fill_brewer(palette = "Dark2",
-                            name = case_when(input$fillby == "ntc" ~ "gene in NTC list",
-                                             input$fillby == "pval" ~ "p <= 0.01",
-                                             input$fillby == "fdr" ~ "FDR <= 0.05")) +
+          # manually assign Dark2 colors to TRUE/FALSE
+          # so colors don't change if a level isn't present
+          scale_fill_manual(values = c("FALSE" = "#1B9E77", "TRUE" = "#D95F02"),
+                            drop = FALSE,
+                            name = case_when(
+                              #input$fillby == "ntc" ~ "gene in NTC list",
+                              input$fillby == "pval" ~ paste0("p <= ", input$threshold),
+                              input$fillby == "fdr" ~ paste0("FDR <= ", input$threshold)
+                            )) +
           ylab(NULL) +
           xlab("-log10 MAGeCK gene score")
         
@@ -608,7 +614,7 @@ server <- function(input, output, session) {
         # move the x axis label down a bit
         gp3[["x"]][["layout"]][["annotations"]][[1]][["y"]] <- -0.08
         
-        gp3 %>% layout(margin = list(b = 75))
+        gp3 %>% layout(margin = list(b = 75, r = 100))
         
       })  
       
@@ -653,30 +659,37 @@ server <- function(input, output, session) {
                  is_ntc = case_when(str_detect(ntc_list, id) ~ TRUE,
                                     TRUE ~ FALSE)) %>% 
           ggplot(aes(y = id2, x = -log10(score),
-                     fill = case_when(input$fillby == "ntc" ~ is_ntc,
-                                      input$fillby == "pval" ~ p_value <= 0.01,
-                                      input$fillby == "fdr" ~ fdr <= 0.05),
+                     fill = case_when(
+                       #input$fillby == "ntc" ~ is_ntc,
+                       input$fillby == "pval" ~ p_value <= input$threshold,
+                       input$fillby == "fdr" ~ fdr <= input$threshold
+                     ),
                      rank = rank, score = score, p = p_value, fdr = fdr)) +
           geom_col() +
           facet_wrap(~rank_type, scales = "free_y") +
           scale_y_reordered() +
-          scale_fill_brewer(palette = "Dark2",
-                            name = case_when(input$fillby == "ntc" ~ "gene in NTC list",
-                                             input$fillby == "pval" ~ "p <= 0.01",
-                                             input$fillby == "fdr" ~ "FDR <= 0.05")) +
+          # manually assign Dark2 colors to TRUE/FALSE
+          # so colors don't change if a level isn't present
+          scale_fill_manual(values = c("FALSE" = "#1B9E77", "TRUE" = "#D95F02"),
+                            drop = FALSE,
+                            name = case_when(
+                              #input$fillby == "ntc" ~ "gene in NTC list",
+                              input$fillby == "pval" ~ paste0("p <= ", input$threshold),
+                              input$fillby == "fdr" ~ paste0("FDR <= ", input$threshold)
+                            )) +
           ylab(NULL) +
           xlab("-log10 MAGeCK gene score") 
         
         gp4 <- ggplotly(p4, tooltip = c("rank", "score", "p", "fdr"))
-  
+        
         # move the x axis label down a bit
         gp4[["x"]][["layout"]][["annotations"]][[1]][["y"]] <- -0.08
         
-        gp4 %>% layout(margin = list(b = 75))
+        gp4 %>% layout(margin = list(b = 75, r = 100))
         
       })
       
-      ##========================================================================================
+      ##==================================================================================
       
       # DOT PLOT TAB
       
@@ -730,7 +743,7 @@ server <- function(input, output, session) {
         
       })
       
-      ##========================================================================================
+      ##==================================================================================
       
       # COMPARE 2 SCREENS TAB
       
@@ -870,7 +883,7 @@ server <- function(input, output, session) {
           layout(margin = list(l = 75, b = 75))
         
         gp8 <- ggplotly(p8, source = "compare2_plot",
-                       tooltip = c("id", "x", "y", "rank_screen1", "rank_screen2")) 
+                        tooltip = c("id", "x", "y", "rank_screen1", "rank_screen2")) 
         
         # move the axis titles away from the tick labels
         gp8[["x"]][["layout"]][["annotations"]][[2]][["x"]] <- -0.05
@@ -910,14 +923,9 @@ server <- function(input, output, session) {
                                    buttons = I("colvis"),
                                    colReorder = list(realtime = FALSE)),
                     escape = FALSE)
-        
       })
-      
     }
-    
   })
-  
-  
 }
 
 shinyApp(ui = ui, server = server)
