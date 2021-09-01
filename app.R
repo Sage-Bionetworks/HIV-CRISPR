@@ -605,6 +605,7 @@ server <- function(input, output, session) {
         
         gp3 <- ggplotly(p3, tooltip = c("rank", "score", "p", "fdr"))
         
+        # move the x axis label down a bit
         gp3[["x"]][["layout"]][["annotations"]][[1]][["y"]] <- -0.08
         
         gp3 %>% layout(margin = list(b = 75))
@@ -668,6 +669,7 @@ server <- function(input, output, session) {
         
         gp4 <- ggplotly(p4, tooltip = c("rank", "score", "p", "fdr"))
   
+        # move the x axis label down a bit
         gp4[["x"]][["layout"]][["annotations"]][[1]][["y"]] <- -0.08
         
         gp4 %>% layout(margin = list(b = 75))
@@ -870,7 +872,7 @@ server <- function(input, output, session) {
         gp8 <- ggplotly(p8, source = "compare2_plot",
                        tooltip = c("id", "x", "y", "rank_screen1", "rank_screen2")) 
         
-        # move the axis titles so they're not squished against the tick labels
+        # move the axis titles away from the tick labels
         gp8[["x"]][["layout"]][["annotations"]][[2]][["x"]] <- -0.05
         gp8[["x"]][["layout"]][["annotations"]][[1]][["y"]] <- -0.08
         
